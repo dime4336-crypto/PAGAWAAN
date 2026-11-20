@@ -1,0 +1,6 @@
+{
+  "name": "Pagawaan",
+  "description": "Built, fixed, connected. Independent Philippine IT workshop for computer repair, custom Ethernet cabling, device assistance, and software engineering.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
