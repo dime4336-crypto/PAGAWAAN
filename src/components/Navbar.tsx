@@ -1,54 +1,23 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { Menu, ShoppingBag, X } from 'lucide-react';
+import { SITE_NAV_ITEMS, SITE_PAGE_PATHS, type SitePage } from '../config/navigation';
 import { MagneticButton } from './motion/MagneticButton';
 
 interface NavbarProps {
   requestCount: number;
+  currentPage: SitePage;
   onOpenTray: () => void;
-  onOpenAdmin: () => void;
+  onNavigate: (page: SitePage) => void;
 }
 
-const NAV_ITEMS = [
-  { id: 'services', label: 'Services' },
-  { id: 'cable-builder', label: 'Cable Builder' },
-  { id: 'how-it-works', label: 'How It Works' },
-  { id: 'showcase', label: 'Workshop' },
-  { id: 'contact', label: 'Contact' },
-] as const;
-
-export function Navbar({ requestCount, onOpenTray }: NavbarProps) {
+export function Navbar({ requestCount, currentPage, onOpenTray, onNavigate }: NavbarProps) {
   const prefersReducedMotion = useReducedMotion();
-  const [activeId, setActiveId] = useState<string>('services');
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  useEffect(() => {
-    const sections = NAV_ITEMS.map((item) => document.getElementById(item.id)).filter(
-      (el): el is HTMLElement => el !== null
-    );
-    if (sections.length === 0) return;
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (entry.isIntersecting) {
-            setActiveId(entry.target.id);
-          }
-        }
-      },
-      { rootMargin: '-35% 0px -55% 0px', threshold: 0.05 }
-    );
-
-    sections.forEach((sec) => observer.observe(sec));
-    return () => observer.disconnect();
-  }, []);
-
-  const scrollToSection = (id: string) => {
+  const navigate = (page: SitePage) => {
     setMobileOpen(false);
-    const el = document.getElementById(id);
-    if (el) {
-      el.scrollIntoView({ behavior: prefersReducedMotion ? 'auto' : 'smooth' });
-    }
+    onNavigate(page);
   };
 
   return (
@@ -56,11 +25,12 @@ export function Navbar({ requestCount, onOpenTray }: NavbarProps) {
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-8 px-4 py-3.5 sm:px-6 lg:px-8">
         {/* Zone 1: Single clean wordmark */}
         <a
-          href="#top"
+          href={SITE_PAGE_PATHS.home}
           onClick={(e) => {
             e.preventDefault();
-            window.scrollTo({ top: 0, behavior: prefersReducedMotion ? 'auto' : 'smooth' });
+            navigate('home');
           }}
+          aria-current={currentPage === 'home' ? 'page' : undefined}
           className="font-display text-xl font-bold tracking-tight text-[#EDE6D6] whitespace-nowrap shrink-0 transition-colors hover:text-[#D97724]"
           data-cursor-label="Home"
         >
@@ -72,16 +42,17 @@ export function Navbar({ requestCount, onOpenTray }: NavbarProps) {
           aria-label="Primary navigation"
           className="hidden md:flex items-center gap-7 text-sm font-medium text-[#A39B8B]"
         >
-          {NAV_ITEMS.map((item) => {
-            const isActive = activeId === item.id;
+          {SITE_NAV_ITEMS.map((item) => {
+            const isActive = currentPage === item.id;
             return (
               <a
                 key={item.id}
-                href={`#${item.id}`}
+                href={SITE_PAGE_PATHS[item.id]}
                 onClick={(e) => {
                   e.preventDefault();
-                  scrollToSection(item.id);
+                  navigate(item.id);
                 }}
+                aria-current={isActive ? 'page' : undefined}
                 className={`relative py-1.5 whitespace-nowrap shrink-0 transition-colors duration-150 ${
                   isActive ? 'text-[#EDE6D6]' : 'hover:text-[#EDE6D6]'
                 }`}
@@ -140,14 +111,15 @@ export function Navbar({ requestCount, onOpenTray }: NavbarProps) {
             className="border-t border-[#EDE6D6]/10 bg-[#1B1917] px-4 py-4 md:hidden"
           >
             <div className="flex flex-col divide-y divide-[#EDE6D6]/8">
-              {NAV_ITEMS.map((item) => (
+              {SITE_NAV_ITEMS.map((item) => (
                 <a
                   key={item.id}
-                  href={`#${item.id}`}
+                  href={SITE_PAGE_PATHS[item.id]}
                   onClick={(e) => {
                     e.preventDefault();
-                    scrollToSection(item.id);
+                    navigate(item.id);
                   }}
+                  aria-current={currentPage === item.id ? 'page' : undefined}
                   className="flex min-h-[44px] items-center justify-between py-2.5 text-sm font-medium text-[#EDE6D6] hover:text-[#D97724]"
                 >
                   <span>{item.label}</span>

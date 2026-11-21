@@ -2,6 +2,11 @@ import { useCallback, useEffect, useState } from 'react';
 import { AnimatePresence, MotionConfig, motion, useReducedMotion } from 'motion/react';
 import { CheckCircle2 } from 'lucide-react';
 import { DEFAULT_WORKSHOP_CONFIG, type WorkshopContactConfig } from './config/workshop';
+import {
+  getSitePageFromPath,
+  SITE_PAGE_PATHS,
+  type SitePage,
+} from './config/navigation';
 import { AdminDashboard } from './components/AdminDashboard';
 import { CableBuilder } from './components/CableBuilder';
 import { ContactFooter } from './components/ContactFooter';
@@ -20,8 +25,10 @@ import type { CartServiceItem, ServiceCategory, ServiceItem } from './types/paga
 
 export default function App() {
   const prefersReducedMotion = useReducedMotion();
-  const [isAdminRoute, setIsAdminRoute] = useState(
-    () => typeof window !== 'undefined' && window.location.pathname === '/admin'
+  const [currentPage, setCurrentPage] = useState<SitePage | 'admin'>(() =>
+    typeof window !== 'undefined' && window.location.pathname === '/admin'
+      ? 'admin'
+      : getSitePageFromPath(typeof window !== 'undefined' ? window.location.pathname : '/')
   );
   const [introDone, setIntroDone] = useState(false);
 
@@ -77,7 +84,12 @@ export default function App() {
 
   useEffect(() => {
     const onPopState = () => {
-      setIsAdminRoute(window.location.pathname === '/admin');
+      setCurrentPage(
+        window.location.pathname === '/admin'
+          ? 'admin'
+          : getSitePageFromPath(window.location.pathname)
+      );
+      window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
     };
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
@@ -85,14 +97,21 @@ export default function App() {
 
   const openAdmin = () => {
     window.history.pushState({}, '', '/admin');
-    setIsAdminRoute(true);
-    window.scrollTo({ top: 0 });
+    setCurrentPage('admin');
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
   };
 
   const exitAdmin = () => {
-    window.history.pushState({}, '', '/');
-    setIsAdminRoute(false);
-    window.scrollTo({ top: 0 });
+    navigateToPage('home');
+  };
+
+  const navigateToPage = (page: SitePage) => {
+    const path = SITE_PAGE_PATHS[page];
+    if (window.location.pathname !== path) {
+      window.history.pushState({}, '', path);
+    }
+    setCurrentPage(page);
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
   };
 
   const handleAddToCart = (item: CartServiceItem) => {
@@ -120,19 +139,12 @@ export default function App() {
     setCartItems((prev) => prev.filter((i) => i.uid !== uid));
   };
 
-  const scrollToElement = (id: string) => {
-    const el = document.getElementById(id);
-    if (el) {
-      el.scrollIntoView({ behavior: prefersReducedMotion ? 'auto' : 'smooth' });
-    }
-  };
-
   const customCableService = services.find((s) => s.slug === 'custom-ethernet-cable');
   const websiteDevService = services.find((s) => s.slug === 'website-development');
 
   const totalCount = cartItems.reduce((sum, item) => sum + item.quantity, 0);
 
-  if (isAdminRoute) {
+  if (currentPage === 'admin') {
     return (
       <MotionConfig reducedMotion="user">
         <AdminDashboard
@@ -153,57 +165,68 @@ export default function App() {
 
         <Navbar
           requestCount={totalCount}
+          currentPage={currentPage}
           onOpenTray={() => setTrayOpen(true)}
-          onOpenAdmin={openAdmin}
+          onNavigate={navigateToPage}
         />
 
         <main>
-          <HeroWorkshop
-            config={workshopConfig}
-            onExploreServices={() => scrollToElement('services')}
-            onStartRequest={() => {
-              if (cartItems.length > 0) {
-                setTrayOpen(true);
-              } else {
-                scrollToElement('services');
-              }
-            }}
-          />
+          {currentPage === 'home' && (
+            <HeroWorkshop
+              config={workshopConfig}
+              onExploreServices={() => navigateToPage('services')}
+              onStartRequest={() => {
+                if (cartItems.length > 0) {
+                  setTrayOpen(true);
+                } else {
+                  navigateToPage('services');
+                }
+              }}
+            />
+          )}
 
-          <ServiceCatalog
-            categories={categories}
-            services={services}
-            loading={catalogLoading}
-            error={catalogError}
-            onRetry={loadPublicData}
-            onInspectService={(srv) => setInspectedService(srv)}
-            onConfigureService={(srv) => setConfiguringService(srv)}
-            onJumpToCableBuilder={() => scrollToElement('cable-builder')}
-          />
+          {currentPage === 'services' && (
+            <ServiceCatalog
+              categories={categories}
+              services={services}
+              loading={catalogLoading}
+              error={catalogError}
+              onRetry={loadPublicData}
+              onInspectService={(srv) => setInspectedService(srv)}
+              onConfigureService={(srv) => setConfiguringService(srv)}
+              onJumpToCableBuilder={() => navigateToPage('cable-builder')}
+            />
+          )}
 
-          <CableBuilder
-            cableService={customCableService}
-            onAddCableToRequest={handleAddToCart}
-          />
+          {currentPage === 'cable-builder' && (
+            <CableBuilder
+              cableService={customCableService}
+              onAddCableToRequest={handleAddToCart}
+            />
+          )}
 
-          <HowItWorksAndAbout />
+          {currentPage === 'how-it-works' && <HowItWorksAndAbout />}
 
-          <WorkshopShowcase
-            onRequestWebProject={() => {
-              if (websiteDevService) {
-                setConfiguringService(websiteDevService);
-              } else {
-                scrollToElement('services');
-              }
-            }}
-          />
+          {currentPage === 'showcase' && (
+            <WorkshopShowcase
+              onRequestWebProject={() => {
+                if (websiteDevService) {
+                  setConfiguringService(websiteDevService);
+                } else {
+                  navigateToPage('services');
+                }
+              }}
+            />
+          )}
+
+          {currentPage === 'contact' && (
+            <ContactFooter
+              config={workshopConfig}
+              onOpenAdmin={openAdmin}
+              onOpenTray={() => setTrayOpen(true)}
+            />
+          )}
         </main>
-
-        <ContactFooter
-          config={workshopConfig}
-          onOpenAdmin={openAdmin}
-          onOpenTray={() => setTrayOpen(true)}
-        />
 
         <PublicQueue refreshToken={queueRefreshToken} />
 
