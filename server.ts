@@ -10,16 +10,19 @@ import {
   addRequestInternalNote,
   createCategoryRecord,
   createServiceRequest,
+  createMarketplaceListing,
   getAdminCatalog,
   getPublicCatalog,
   getWorkshopConfig,
   initializeDatabase,
   listPublicQueueItems,
   listAllServiceRequests,
+  listMarketplaceListings,
   updateRequestQueueStatus,
   updateCategoryRecord,
   updateRequestStatus,
   updateServiceRecord,
+  updateMarketplaceListingStatus,
   updateWorkshopConfig,
 } from './src/server/db.ts';
 import {
@@ -40,8 +43,13 @@ const SESSION_SECRET =
   crypto.createHash('sha256').update(`pagawaan-${ADMIN_ACCESS_KEY}-secret`).digest('hex');
 
 const rateLimitStore = new Map<string, { count: number; windowStart: number }>();
+const actionPinAttemptStore = new Map<string, { count: number; windowStart: number }>();
 const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
 const RATE_LIMIT_MAX_REQUESTS = 12;
+const ACTION_PIN_MAX_ATTEMPTS = 8;
+const MAX_LISTING_IMAGE_BYTES = 1_200_000;
+const MAX_LISTING_IMAGES = 4;
+const MARKETPLACE_CONDITIONS = ['Brand new', 'In stock', 'Like new', 'Second-hand'] as const;
 
 function isRateLimited(ip: string): boolean {
   const now = Date.now();
@@ -55,6 +63,42 @@ function isRateLimited(ip: string): boolean {
   }
   record.count += 1;
   return false;
+}
+
+function verifyActionPin(req: Request, res: Response): boolean {
+  const expectedPin = process.env.ADMIN_ACTION_PIN;
+  if (!expectedPin) {
+    res.status(503).json({ error: 'Admin action PIN is not configured on the server.' });
+    return false;
+  }
+
+  const ip = req.ip || 'unknown';
+  const now = Date.now();
+  const attempts = actionPinAttemptStore.get(ip);
+  if (attempts && now - attempts.windowStart <= RATE_LIMIT_WINDOW_MS) {
+    if (attempts.count >= ACTION_PIN_MAX_ATTEMPTS) {
+      res.status(429).json({ error: 'Too many PIN attempts. Please try again later.' });
+      return false;
+    }
+    attempts.count += 1;
+  } else {
+    actionPinAttemptStore.set(ip, { count: 1, windowStart: now });
+  }
+
+  const pin = typeof req.body?.pin === 'string' ? req.body.pin : '';
+  const pinBuffer = Buffer.from(pin);
+  const expectedBuffer = Buffer.from(expectedPin);
+  if (
+    pinBuffer.length === 0 ||
+    pinBuffer.length !== expectedBuffer.length ||
+    !crypto.timingSafeEqual(pinBuffer, expectedBuffer)
+  ) {
+    res.status(401).json({ error: 'Incorrect PIN.' });
+    return false;
+  }
+
+  actionPinAttemptStore.delete(ip);
+  return true;
 }
 
 function signSessionToken(expiresAt: number): string {
@@ -102,7 +146,7 @@ function escapeCsvCell(value: unknown): string {
 async function startServer(): Promise<void> {
   const app = express();
   app.set('trust proxy', 1);
-  app.use(express.json({ limit: '256kb' }));
+  app.use(express.json({ limit: '10mb' }));
   app.use(cookieParser());
 
   // Public catalog & workshop configuration
@@ -131,6 +175,81 @@ async function startServer(): Promise<void> {
       console.error('Failed to fetch public service queue:', error);
       res.status(500).json({ error: 'Unable to load the service queue.' });
     }
+  });
+
+  app.get('/api/marketplace', (_req, res) => {
+    try {
+      res.json({
+        listings: listMarketplaceListings().filter((listing) => listing.status === 'Available'),
+      });
+    } catch (error) {
+      console.error('Failed to fetch marketplace listings:', error);
+      res.status(500).json({ error: 'Unable to load For Sale listings.' });
+    }
+  });
+
+  app.post('/api/marketplace', (req, res) => {
+    if (!verifyActionPin(req, res)) return;
+
+    const listingSchema = z.object({
+      pin: z.string(),
+      title: z.string().trim().min(3).max(100),
+      category: z.string().trim().min(2).max(50),
+      description: z.string().trim().min(5).max(2000),
+      price: z.number().int().min(0).max(5_000_000),
+      condition: z.enum(MARKETPLACE_CONDITIONS),
+      location: z.string().trim().min(2).max(120),
+      images: z.array(z.string().max(2_000_000)).max(MAX_LISTING_IMAGES),
+    });
+    const parsed = listingSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({
+        error: parsed.error.issues[0]?.message || 'Invalid listing details.',
+      });
+      return;
+    }
+
+    const { images } = parsed.data;
+    for (const image of images) {
+      const match = /^data:image\/(jpeg|png|webp);base64,([A-Za-z0-9+/]+={0,2})$/.exec(image);
+      if (!match) {
+        res.status(400).json({ error: 'Use JPEG, PNG, or WebP listing photos.' });
+        return;
+      }
+      const sizeBytes = Buffer.from(match[2], 'base64').length;
+      if (sizeBytes === 0 || sizeBytes > MAX_LISTING_IMAGE_BYTES) {
+        res.status(400).json({ error: 'Each listing photo must be smaller than 1.2 MB.' });
+        return;
+      }
+    }
+
+    try {
+      const listing = createMarketplaceListing(parsed.data);
+      res.status(201).json({ listing });
+    } catch (error) {
+      console.error('Failed to create marketplace listing:', error);
+      res.status(500).json({ error: 'Unable to publish listing.' });
+    }
+  });
+
+  app.patch('/api/marketplace/:id/status', (req, res) => {
+    if (!verifyActionPin(req, res)) return;
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) {
+      res.status(400).json({ error: 'Invalid listing ID.' });
+      return;
+    }
+    const parsed = z.object({ pin: z.string(), status: z.enum(['Available', 'Sold']) }).safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: 'Invalid listing status.' });
+      return;
+    }
+    const listing = updateMarketplaceListingStatus(id, parsed.data.status);
+    if (!listing) {
+      res.status(404).json({ error: 'Listing not found.' });
+      return;
+    }
+    res.json({ listing });
   });
 
   // Public service request submission with anti-spam + server-side calculation
@@ -246,6 +365,7 @@ async function startServer(): Promise<void> {
       res.status(400).json({ error: 'Invalid status value.' });
       return;
     }
+    if (parsed.data.status === 'Cancelled' && !verifyActionPin(req, res)) return;
 
     const updated = updateRequestStatus(id, parsed.data.status as (typeof REQUEST_STATUSES)[number]);
     if (!updated) {
@@ -264,11 +384,13 @@ async function startServer(): Promise<void> {
 
     const parsed = z.object({
       queueStatus: z.enum(QUEUE_STATUSES),
+      pin: z.string(),
     }).safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ error: 'Invalid queue status value.' });
       return;
     }
+    if (!verifyActionPin(req, res)) return;
 
     const updated = updateRequestQueueStatus(id, parsed.data.queueStatus);
     if (!updated) {

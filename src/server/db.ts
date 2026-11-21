@@ -10,6 +10,8 @@ import type {
   RequestStatus,
   QueueStatus,
   PublicQueueItem,
+  MarketplaceCondition,
+  MarketplaceListing,
   ServiceCategory,
   ServiceItem,
   ServiceRequestRecord,
@@ -105,6 +107,19 @@ export function initializeDatabase(): void {
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
+    CREATE TABLE IF NOT EXISTS marketplace_listings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      title TEXT NOT NULL,
+      category TEXT NOT NULL,
+      description TEXT NOT NULL,
+      price INTEGER NOT NULL CHECK (price >= 0),
+      condition TEXT NOT NULL,
+      location TEXT NOT NULL,
+      images TEXT NOT NULL DEFAULT '[]',
+      status TEXT NOT NULL DEFAULT 'Available' CHECK (status IN ('Available', 'Sold')),
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
     CREATE INDEX IF NOT EXISTS idx_services_category ON services(category_id);
     CREATE INDEX IF NOT EXISTS idx_requests_status ON service_requests(status);
     CREATE INDEX IF NOT EXISTS idx_requests_created ON service_requests(created_at DESC);
@@ -136,6 +151,46 @@ function seedWorkshopConfigIfEmpty(): void {
   if (!existing) {
     sqlite
       .prepare('INSERT INTO workshop_settings (key, value) VALUES (?, ?)')
+      .run('contact_config', JSON.stringify(DEFAULT_WORKSHOP_CONFIG));
+    return;
+  }
+
+  try {
+    const saved = JSON.parse(existing.value) as Partial<WorkshopContactConfig>;
+    const usesPlaceholderDetails =
+      saved.serviceLocation?.startsWith('Metro Manila') ||
+      saved.email === 'workshop@pagawaan.ph' ||
+      saved.contactNumber?.includes('917 000 0000') ||
+      saved.whatsappUrl === 'https://wa.me/639170000000';
+
+    if (usesPlaceholderDetails) {
+      sqlite
+        .prepare(
+          `INSERT INTO workshop_settings (key, value, updated_at)
+           VALUES (?, ?, datetime('now'))
+           ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`
+        )
+        .run(
+          'contact_config',
+          JSON.stringify({
+            ...DEFAULT_WORKSHOP_CONFIG,
+            ...saved,
+            serviceLocation: DEFAULT_WORKSHOP_CONFIG.serviceLocation,
+            coveredCities: DEFAULT_WORKSHOP_CONFIG.coveredCities,
+            email: DEFAULT_WORKSHOP_CONFIG.email,
+            contactNumber: DEFAULT_WORKSHOP_CONFIG.contactNumber,
+            businessHours: DEFAULT_WORKSHOP_CONFIG.businessHours,
+            whatsappUrl: DEFAULT_WORKSHOP_CONFIG.whatsappUrl,
+          })
+        );
+    }
+  } catch {
+    sqlite
+      .prepare(
+        `INSERT INTO workshop_settings (key, value, updated_at)
+         VALUES (?, ?, datetime('now'))
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`
+      )
       .run('contact_config', JSON.stringify(DEFAULT_WORKSHOP_CONFIG));
   }
 }
@@ -180,6 +235,7 @@ function seedCatalogIfEmpty(): void {
     string,
     number,
   ];
+  type FixedServiceSeed = [number, string, string, string, number];
 
   const tx = sqlite.transaction(() => {
     const categories: Array<[string, string, string, number]> = [
@@ -204,7 +260,7 @@ function seedCatalogIfEmpty(): void {
       turnaround = 'Est. upon assessment',
       configurator = 'general_service',
       quantity = 1,
-    ): ServiceSeed[number][] =>
+    ): FixedServiceSeed =>
       [start, 'fixed_starting', turnaround, configurator, quantity];
 
     const services: ServiceSeed[] = [
@@ -678,8 +734,11 @@ export function listPublicQueueItems(): PublicQueueItem[] {
        FROM service_requests r
        JOIN service_request_items i ON i.request_id = r.id
        JOIN services s ON s.id = i.service_id
-       WHERE r.queue_status != 'Done'
-          OR r.queue_done_at >= datetime('now', '-30 minutes')
+       WHERE r.status != 'Cancelled'
+         AND (
+           r.queue_status != 'Done'
+           OR r.queue_done_at >= datetime('now', '-30 minutes')
+         )
        ORDER BY r.created_at ASC, i.id ASC`
     )
     .all() as Array<{
@@ -710,10 +769,86 @@ export function listPublicQueueItems(): PublicQueueItem[] {
 
 export function updateRequestStatus(id: number, status: RequestStatus): ServiceRequestRecord | null {
   const result = sqlite
-    .prepare('UPDATE service_requests SET status = ? WHERE id = ?')
-    .run(status, id);
+    .prepare(
+      `UPDATE service_requests
+       SET status = ?,
+           queue_status = CASE WHEN ? = 'Cancelled' THEN 'Done' ELSE queue_status END,
+           queue_done_at = CASE WHEN ? = 'Cancelled' THEN datetime('now') ELSE queue_done_at END
+       WHERE id = ?`
+    )
+    .run(status, status, status, id);
   if (result.changes === 0) return null;
   return getServiceRequestById(id);
+}
+
+export function listMarketplaceListings(): MarketplaceListing[] {
+  const rows = sqlite
+    .prepare(
+      `SELECT id, title, category, description, price, condition, location, images, status,
+              created_at as createdAt
+       FROM marketplace_listings
+       ORDER BY created_at DESC, id DESC`
+    )
+    .all() as Array<Omit<MarketplaceListing, 'images'> & { images: string }>;
+
+  return rows.map((row) => ({
+    ...row,
+    images: safeParseStringArray(row.images),
+  }));
+}
+
+export function createMarketplaceListing(input: {
+  title: string;
+  category: string;
+  description: string;
+  price: number;
+  condition: MarketplaceCondition;
+  location: string;
+  images: string[];
+}): MarketplaceListing {
+  const result = sqlite
+    .prepare(
+      `INSERT INTO marketplace_listings
+        (title, category, description, price, condition, location, images)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
+    )
+    .run(
+      input.title.trim(),
+      input.category,
+      input.description.trim(),
+      input.price,
+      input.condition,
+      input.location.trim(),
+      JSON.stringify(input.images)
+    );
+  const listing = sqlite
+    .prepare(
+      `SELECT id, title, category, description, price, condition, location, images, status,
+              created_at as createdAt
+       FROM marketplace_listings WHERE id = ?`
+    )
+    .get(Number(result.lastInsertRowid)) as Omit<MarketplaceListing, 'images'> & {
+    images: string;
+  };
+  return { ...listing, images: safeParseStringArray(listing.images) };
+}
+
+export function updateMarketplaceListingStatus(
+  id: number,
+  status: MarketplaceListing['status']
+): MarketplaceListing | null {
+  const result = sqlite
+    .prepare('UPDATE marketplace_listings SET status = ? WHERE id = ?')
+    .run(status, id);
+  if (result.changes === 0) return null;
+  const listing = sqlite
+    .prepare(
+      `SELECT id, title, category, description, price, condition, location, images, status,
+              created_at as createdAt
+       FROM marketplace_listings WHERE id = ?`
+    )
+    .get(id) as Omit<MarketplaceListing, 'images'> & { images: string };
+  return { ...listing, images: safeParseStringArray(listing.images) };
 }
 
 export function updateRequestQueueStatus(
@@ -857,5 +992,16 @@ function safeParseJson(raw: string): Record<string, unknown> {
     return typeof parsed === 'object' && parsed !== null ? parsed : {};
   } catch {
     return {};
+  }
+}
+
+function safeParseStringArray(raw: string): string[] {
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed) && parsed.every((value) => typeof value === 'string')
+      ? parsed
+      : [];
+  } catch {
+    return [];
   }
 }

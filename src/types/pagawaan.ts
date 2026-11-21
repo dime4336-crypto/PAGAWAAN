@@ -8,7 +8,7 @@ export type CategorySlug =
   | 'phone-hardware'
   | 'data-recovery'
   | 'data-storage'
-  | 'software-development';
+  | 'software-development'
   | 'additional-services'
   | 'service-packages';
 
@@ -138,6 +138,25 @@ export interface PublicQueueItem {
   referenceNumber: string;
   queueStatus: QueueStatus;
   serviceNames: string[];
+  createdAt: string;
+}
+
+export type MarketplaceCondition =
+  | 'Brand new'
+  | 'In stock'
+  | 'Like new'
+  | 'Second-hand';
+
+export interface MarketplaceListing {
+  id: number;
+  title: string;
+  category: string;
+  description: string;
+  price: number;
+  condition: MarketplaceCondition;
+  location: string;
+  images: string[];
+  status: 'Available' | 'Sold';
   createdAt: string;
 }
 

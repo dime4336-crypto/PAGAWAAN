@@ -1,5 +1,6 @@
 export const SITE_NAV_ITEMS = [
   { id: 'services', label: 'Services' },
+  { id: 'for-sale', label: 'For Sale' },
   { id: 'cable-builder', label: 'Cable Builder' },
   { id: 'how-it-works', label: 'How It Works' },
   { id: 'showcase', label: 'Workshop' },
@@ -11,6 +12,7 @@ export type SitePage = 'home' | (typeof SITE_NAV_ITEMS)[number]['id'];
 export const SITE_PAGE_PATHS: Record<SitePage, string> = {
   home: '/',
   services: '/services',
+  'for-sale': '/for-sale',
   'cable-builder': '/cable-builder',
   'how-it-works': '/how-it-works',
   showcase: '/workshop',

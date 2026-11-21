@@ -10,6 +10,7 @@ import {
 import { AdminDashboard } from './components/AdminDashboard';
 import { CableBuilder } from './components/CableBuilder';
 import { ContactFooter } from './components/ContactFooter';
+import { ForSaleMarketplace } from './components/ForSaleMarketplace';
 import { HeroWorkshop } from './components/HeroWorkshop';
 import { HowItWorksAndAbout } from './components/HowItWorksAndAbout';
 import { CalibrationIntro } from './components/motion/CalibrationIntro';
@@ -195,6 +196,13 @@ export default function App() {
               onInspectService={(srv) => setInspectedService(srv)}
               onConfigureService={(srv) => setConfiguringService(srv)}
               onJumpToCableBuilder={() => navigateToPage('cable-builder')}
+            />
+          )}
+
+          {currentPage === 'for-sale' && (
+            <ForSaleMarketplace
+              sellerPhone={workshopConfig.contactNumber}
+              sellerEmail={workshopConfig.email}
             />
           )}
 

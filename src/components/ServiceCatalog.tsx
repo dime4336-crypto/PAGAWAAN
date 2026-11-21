@@ -32,8 +32,14 @@ function getCategoryIcon(slug: string) {
       return Cpu;
     case 'networking-ethernet':
       return Network;
+    case 'network-router':
+      return Network;
     case 'mobile-assistance':
       return Smartphone;
+    case 'phone-hardware':
+      return Smartphone;
+    case 'data-storage':
+      return Wrench;
     case 'software-development':
       return Code2;
     default:

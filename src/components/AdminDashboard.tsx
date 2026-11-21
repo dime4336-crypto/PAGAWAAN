@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { formatPHP } from '../config/pricing';
 import type { WorkshopContactConfig } from '../config/workshop';
+import { ActionPinDialog } from './ActionPinDialog';
 import {
   REQUEST_STATUSES,
   QUEUE_STATUSES,
@@ -56,8 +57,12 @@ export function AdminDashboard({
   const [selectedRequestId, setSelectedRequestId] = useState<number | null>(null);
   const [newNote, setNewNote] = useState('');
   const [savingNote, setSavingNote] = useState(false);
-  const [queueStatusError, setQueueStatusError] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [pinAction, setPinAction] = useState<{
+    title: string;
+    description: string;
+    confirm: (pin: string) => Promise<void>;
+  } | null>(null);
 
   // Price editing map
   const [priceEdits, setPriceEdits] = useState<Record<number, string>>({});
@@ -190,40 +195,54 @@ export function AdminDashboard({
     [requests, selectedRequestId, filteredRequests]
   );
 
-  const handleStatusChange = async (requestId: number, status: RequestStatus) => {
-    const res = await fetch(`/api/admin/requests/${requestId}`, {
+  const saveRequestStatus = async (requestId: number, status: RequestStatus, pin?: string) => {
+    const response = await fetch(`/api/admin/requests/${requestId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status }),
+      body: JSON.stringify({ status, ...(pin ? { pin } : {}) }),
     });
-    if (res.ok) {
-      const data = await res.json();
-      setRequests((prev) => prev.map((r) => (r.id === requestId ? data.request : r)));
-      showNotice(`Status updated to ${status}`);
-    }
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Unable to update request status.');
+    setRequests((previous) =>
+      previous.map((request) => (request.id === requestId ? data.request : request))
+    );
+    setPinAction(null);
+    showNotice(status === 'Cancelled' ? 'Request declined' : `Status updated to ${status}`);
   };
 
-  const handleQueueStatusChange = async (requestId: number, queueStatus: QueueStatus) => {
-    setQueueStatusError(null);
-    try {
-      const response = await fetch(`/api/admin/requests/${requestId}/queue-status`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ queueStatus }),
+  const handleStatusChange = (requestId: number, status: RequestStatus) => {
+    if (status === 'Cancelled') {
+      setPinAction({
+        title: 'Decline service request',
+        description: 'Enter the admin PIN to decline this request and remove it from the public queue.',
+        confirm: (pin) => saveRequestStatus(requestId, status, pin),
       });
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || 'Unable to update queue status.');
-      }
-      setRequests((previous) =>
-        previous.map((request) => (request.id === requestId ? data.request : request))
-      );
-      showNotice(`Queue status updated to ${queueStatus}`);
-    } catch (err: unknown) {
-      setQueueStatusError(
-        err instanceof Error ? err.message : 'Unable to update queue status.'
-      );
+      return;
     }
+    void saveRequestStatus(requestId, status).catch((error: unknown) => {
+      setDataError(error instanceof Error ? error.message : 'Unable to update request status.');
+    });
+  };
+
+  const handleQueueStatusChange = (requestId: number, queueStatus: QueueStatus) => {
+    setPinAction({
+      title: 'Update queue progress',
+      description: `Enter the admin PIN to change this request to “${queueStatus}”.`,
+      confirm: async (pin) => {
+        const response = await fetch(`/api/admin/requests/${requestId}/queue-status`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ queueStatus, pin }),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Unable to update queue status.');
+        setRequests((previous) =>
+          previous.map((request) => (request.id === requestId ? data.request : request))
+        );
+        setPinAction(null);
+        showNotice(`Queue status updated to ${queueStatus}`);
+      },
+    });
   };
 
   const handleAddNote = async (e: React.FormEvent) => {
@@ -429,6 +448,7 @@ export function AdminDashboard({
   }
 
   return (
+    <>
     <div className="min-h-screen bg-[#141312] text-[#EDE6D6]">
       {/* Top Bar */}
       <header className="border-b border-[#EDE6D6]/12 bg-[#1B1917] px-4 py-3.5 sm:px-6 lg:px-8">
@@ -657,10 +677,16 @@ export function AdminDashboard({
                             </option>
                           ))}
                         </select>
-                        {queueStatusError && (
-                          <p role="alert" className="mt-1 max-w-48 text-[10px] text-[#B8443A]">
-                            {queueStatusError}
-                          </p>
+                        {selectedRequest.status !== 'Cancelled' && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleStatusChange(selectedRequest.id, 'Cancelled')
+                            }
+                            className="mt-2 min-h-8 border border-[#B8443A]/50 px-2.5 text-[10px] font-medium text-[#E58A80] hover:bg-[#B8443A]/15"
+                          >
+                            Decline request
+                          </button>
                         )}
                       </div>
                     </div>
@@ -976,5 +1002,14 @@ export function AdminDashboard({
         )}
       </main>
     </div>
+    {pinAction && (
+      <ActionPinDialog
+        title={pinAction.title}
+        description={pinAction.description}
+        onCancel={() => setPinAction(null)}
+        onConfirm={pinAction.confirm}
+      />
+    )}
+    </>
   );
 }

@@ -69,7 +69,12 @@ export function ContactFooter({
               </div>
               <div className="flex items-start gap-3 text-xs text-[#A39B8B]">
                 <Phone className="mt-0.5 h-4 w-4 shrink-0 text-[#D97724]" aria-hidden="true" />
-                <span className="font-mono text-[#EDE6D6]">{config.contactNumber}</span>
+                <a
+                  href={`tel:+63${config.contactNumber.replace(/^0/, '')}`}
+                  className="font-mono text-[#EDE6D6] hover:text-[#D97724]"
+                >
+                  {config.contactNumber}
+                </a>
               </div>
             </div>
 

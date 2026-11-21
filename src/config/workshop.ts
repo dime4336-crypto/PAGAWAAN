@@ -16,8 +16,11 @@ export interface WorkshopContactConfig {
 export const DEFAULT_WORKSHOP_CONFIG: WorkshopContactConfig = {
   brandName: 'Pagawaan',
   tagline: 'Built, fixed, connected.',
-  serviceLocation: 'Metro Manila, Philippines (Quezon City / Makati / Pasig / Manila / Taguig)',
+  serviceLocation: '130 Sampaguita Street, Greenheight Newtown Subd., Mayamot, Antipolo City, Rizal',
   coveredCities: [
+    'Antipolo',
+    'Mayamot',
+    'Rizal',
     'Quezon City',
     'Manila',
     'Makati',
@@ -29,12 +32,12 @@ export const DEFAULT_WORKSHOP_CONFIG: WorkshopContactConfig = {
     'Parañaque',
     'Caloocan',
   ],
-  email: 'workshop@pagawaan.ph',
-  contactNumber: '+63 917 000 0000 (Configurable)',
-  businessHours: 'Monday – Saturday, 10:00 AM – 7:00 PM PHT (By Arrangement)',
+  email: 'erlinadimla28@gmail.com',
+  contactNumber: '09928389557',
+  businessHours: 'Weeknights: 6:00 PM – 8:00 PM · Weekends: 10:00 AM – 6:00 PM',
   facebookUrl: 'https://facebook.com/pagawaan.workshop',
   messengerUrl: 'https://m.me/pagawaan.workshop',
-  whatsappUrl: 'https://wa.me/639170000000',
+  whatsappUrl: 'https://wa.me/639928389557',
   availabilityDisclaimer:
     'Service schedules, on-site visits, and parts procurement are subject to technician availability and confirmation after request review.',
   pricingDisclaimer:
