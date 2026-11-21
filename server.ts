@@ -42,7 +42,7 @@ const SESSION_SECRET =
 const FRONTEND_ORIGINS = new Set(
   (process.env.FRONTEND_ORIGIN || '')
     .split(',')
-    .map((origin) => origin.trim())
+    .map((origin) => origin.trim().replace(/\/+$/, ''))
     .filter(Boolean)
 );
 
