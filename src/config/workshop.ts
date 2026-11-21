@@ -79,7 +79,7 @@ export const SHOWCASE_PROJECTS: ShowcaseProject[] = [
       'The interactive storefront and workshop operations console you are using right now—featuring live SVG Ethernet pinout simulation, server-verified PHP pricing, multi-service request intake, and a protected owner console.',
     architectureNotes:
       'Built with strict TypeScript schemas, server-authoritative pricing validation, and relational persistence with zero client-side login friction.',
-    stack: ['React 19', 'TypeScript', 'Express', 'SQLite / PostgreSQL', 'Zod', 'Motion'],
+    stack: ['React 19', 'TypeScript', 'Express', 'Supabase PostgreSQL', 'Zod', 'Motion'],
     imageUrl: WORKSHOP_MEDIA.heroBench,
     imageAlt: 'Pagawaan precision repair and testing bench with oscilloscope and Ethernet tools',
     liveUrl: '#top',

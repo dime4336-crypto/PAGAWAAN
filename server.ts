@@ -33,8 +33,6 @@ import {
 
 dotenv.config();
 
-initializeDatabase();
-
 const PORT = Number(process.env.PORT) || 3000;
 const ADMIN_COOKIE_NAME = 'pagawaan_admin_session';
 const ADMIN_ACCESS_KEY = process.env.ADMIN_ACCESS_KEY || 'pagawaan-bench-2026';
@@ -149,7 +147,16 @@ function escapeCsvCell(value: unknown): string {
   return str;
 }
 
+function asyncRoute(
+  handler: (req: Request, res: Response) => Promise<void>
+): express.RequestHandler {
+  return (req, res, next) => {
+    void handler(req, res).catch(next);
+  };
+}
+
 async function startServer(): Promise<void> {
+  await initializeDatabase();
   const app = express();
   app.set('trust proxy', 1);
   app.use((req, res, next) => {
@@ -171,45 +178,47 @@ async function startServer(): Promise<void> {
   app.use(cookieParser());
 
   // Public catalog & workshop configuration
-  app.get('/api/catalog', (_req, res) => {
+  app.get('/api/catalog', asyncRoute(async (_req, res) => {
     try {
-      res.json(getPublicCatalog());
+      res.json(await getPublicCatalog());
     } catch (error) {
       console.error('Failed to fetch catalog:', error);
       res.status(500).json({ error: 'Unable to load service catalog.' });
     }
-  });
+  }));
 
-  app.get('/api/config', (_req, res) => {
+  app.get('/api/config', asyncRoute(async (_req, res) => {
     try {
-      res.json(getWorkshopConfig());
+      res.json(await getWorkshopConfig());
     } catch (error) {
       console.error('Failed to fetch workshop config:', error);
       res.status(500).json({ error: 'Unable to load workshop configuration.' });
     }
-  });
+  }));
 
-  app.get('/api/queue', (_req, res) => {
+  app.get('/api/queue', asyncRoute(async (_req, res) => {
     try {
-      res.json({ items: listPublicQueueItems() });
+      res.json({ items: await listPublicQueueItems() });
     } catch (error) {
       console.error('Failed to fetch public service queue:', error);
       res.status(500).json({ error: 'Unable to load the service queue.' });
     }
-  });
+  }));
 
-  app.get('/api/marketplace', (_req, res) => {
+  app.get('/api/marketplace', asyncRoute(async (_req, res) => {
     try {
       res.json({
-        listings: listMarketplaceListings().filter((listing) => listing.status === 'Available'),
+        listings: (await listMarketplaceListings()).filter(
+          (listing) => listing.status === 'Available'
+        ),
       });
     } catch (error) {
       console.error('Failed to fetch marketplace listings:', error);
       res.status(500).json({ error: 'Unable to load For Sale listings.' });
     }
-  });
+  }));
 
-  app.post('/api/marketplace', (req, res) => {
+  app.post('/api/marketplace', asyncRoute(async (req, res) => {
     if (!verifyActionPin(req, res)) return;
 
     const listingSchema = z.object({
@@ -245,15 +254,15 @@ async function startServer(): Promise<void> {
     }
 
     try {
-      const listing = createMarketplaceListing(parsed.data);
+      const listing = await createMarketplaceListing(parsed.data);
       res.status(201).json({ listing });
     } catch (error) {
       console.error('Failed to create marketplace listing:', error);
       res.status(500).json({ error: 'Unable to publish listing.' });
     }
-  });
+  }));
 
-  app.patch('/api/marketplace/:id/status', (req, res) => {
+  app.patch('/api/marketplace/:id/status', asyncRoute(async (req, res) => {
     if (!verifyActionPin(req, res)) return;
     const id = Number(req.params.id);
     if (!Number.isInteger(id) || id <= 0) {
@@ -265,16 +274,16 @@ async function startServer(): Promise<void> {
       res.status(400).json({ error: 'Invalid listing status.' });
       return;
     }
-    const listing = updateMarketplaceListingStatus(id, parsed.data.status);
+    const listing = await updateMarketplaceListingStatus(id, parsed.data.status);
     if (!listing) {
       res.status(404).json({ error: 'Listing not found.' });
       return;
     }
     res.json({ listing });
-  });
+  }));
 
   // Public service request submission with anti-spam + server-side calculation
-  app.post('/api/requests', (req, res) => {
+  app.post('/api/requests', asyncRoute(async (req, res) => {
     const clientIp = req.ip || 'unknown';
     if (isRateLimited(clientIp)) {
       res.status(429).json({
@@ -298,7 +307,7 @@ async function startServer(): Promise<void> {
     }
 
     try {
-      const created = createServiceRequest({
+      const created = await createServiceRequest({
         customerName: parsed.data.customer.customerName,
         contactNumber: parsed.data.customer.contactNumber,
         email: parsed.data.customer.email || undefined,
@@ -316,11 +325,15 @@ async function startServer(): Promise<void> {
       });
     } catch (error: unknown) {
       console.error('Error submitting service request:', error);
-      const message =
-        error instanceof Error ? error.message : 'Unable to save service request.';
-      res.status(400).json({ error: message });
+      const unavailableService =
+        error instanceof Error && error.message.startsWith('Requested service ID ');
+      res.status(unavailableService ? 400 : 500).json({
+        error: unavailableService
+          ? error.message
+          : 'Unable to save service request. Please try again.',
+      });
     }
-  });
+  }));
 
   // Admin session endpoints
   app.get('/api/admin/session', (req, res) => {
@@ -362,16 +375,16 @@ async function startServer(): Promise<void> {
   });
 
   // Protected Admin Operations
-  app.get('/api/admin/requests', requireAdminAuth, (_req, res) => {
+  app.get('/api/admin/requests', requireAdminAuth, asyncRoute(async (_req, res) => {
     try {
-      res.json({ requests: listAllServiceRequests() });
+      res.json({ requests: await listAllServiceRequests() });
     } catch (error) {
       console.error('Admin fetch requests error:', error);
       res.status(500).json({ error: 'Unable to load requests.' });
     }
-  });
+  }));
 
-  app.patch('/api/admin/requests/:id', requireAdminAuth, (req, res) => {
+  app.patch('/api/admin/requests/:id', requireAdminAuth, asyncRoute(async (req, res) => {
     const id = Number(req.params.id);
     if (!Number.isInteger(id) || id <= 0) {
       res.status(400).json({ error: 'Invalid request ID.' });
@@ -388,15 +401,18 @@ async function startServer(): Promise<void> {
     }
     if (parsed.data.status === 'Cancelled' && !verifyActionPin(req, res)) return;
 
-    const updated = updateRequestStatus(id, parsed.data.status as (typeof REQUEST_STATUSES)[number]);
+    const updated = await updateRequestStatus(
+      id,
+      parsed.data.status as (typeof REQUEST_STATUSES)[number]
+    );
     if (!updated) {
       res.status(404).json({ error: 'Service request not found.' });
       return;
     }
     res.json({ request: updated });
-  });
+  }));
 
-  app.patch('/api/admin/requests/:id/queue-status', requireAdminAuth, (req, res) => {
+  app.patch('/api/admin/requests/:id/queue-status', requireAdminAuth, asyncRoute(async (req, res) => {
     const id = Number(req.params.id);
     if (!Number.isInteger(id) || id <= 0) {
       res.status(400).json({ error: 'Invalid request ID.' });
@@ -413,15 +429,15 @@ async function startServer(): Promise<void> {
     }
     if (!verifyActionPin(req, res)) return;
 
-    const updated = updateRequestQueueStatus(id, parsed.data.queueStatus);
+    const updated = await updateRequestQueueStatus(id, parsed.data.queueStatus);
     if (!updated) {
       res.status(404).json({ error: 'Service request not found.' });
       return;
     }
     res.json({ request: updated });
-  });
+  }));
 
-  app.post('/api/admin/requests/:id/notes', requireAdminAuth, (req, res) => {
+  app.post('/api/admin/requests/:id/notes', requireAdminAuth, asyncRoute(async (req, res) => {
     const id = Number(req.params.id);
     if (!Number.isInteger(id) || id <= 0) {
       res.status(400).json({ error: 'Invalid request ID.' });
@@ -437,19 +453,19 @@ async function startServer(): Promise<void> {
       return;
     }
 
-    const updated = addRequestInternalNote(id, parsed.data.note);
+    const updated = await addRequestInternalNote(id, parsed.data.note);
     if (!updated) {
       res.status(404).json({ error: 'Service request not found.' });
       return;
     }
     res.status(201).json({ request: updated });
-  });
+  }));
 
-  app.get('/api/admin/catalog', requireAdminAuth, (_req, res) => {
-    res.json(getAdminCatalog());
-  });
+  app.get('/api/admin/catalog', requireAdminAuth, asyncRoute(async (_req, res) => {
+    res.json(await getAdminCatalog());
+  }));
 
-  app.patch('/api/admin/services/:id', requireAdminAuth, (req, res) => {
+  app.patch('/api/admin/services/:id', requireAdminAuth, asyncRoute(async (req, res) => {
     const id = Number(req.params.id);
     if (!Number.isInteger(id) || id <= 0) {
       res.status(400).json({ error: 'Invalid service ID.' });
@@ -470,15 +486,15 @@ async function startServer(): Promise<void> {
       return;
     }
 
-    const updated = updateServiceRecord(id, parsed.data);
+    const updated = await updateServiceRecord(id, parsed.data);
     if (!updated) {
       res.status(404).json({ error: 'Service not found.' });
       return;
     }
     res.json({ service: updated });
-  });
+  }));
 
-  app.post('/api/admin/categories', requireAdminAuth, (req, res) => {
+  app.post('/api/admin/categories', requireAdminAuth, asyncRoute(async (req, res) => {
     const catSchema = z.object({
       name: z.string().trim().min(2).max(80),
       slug: z
@@ -496,16 +512,11 @@ async function startServer(): Promise<void> {
       return;
     }
 
-    try {
-      const category = createCategoryRecord(parsed.data);
-      res.status(201).json({ category });
-    } catch (error) {
-      console.error('Create category error:', error);
-      res.status(400).json({ error: 'Category slug may already exist.' });
-    }
-  });
+    const category = await createCategoryRecord(parsed.data);
+    res.status(201).json({ category });
+  }));
 
-  app.patch('/api/admin/categories/:id', requireAdminAuth, (req, res) => {
+  app.patch('/api/admin/categories/:id', requireAdminAuth, asyncRoute(async (req, res) => {
     const id = Number(req.params.id);
     if (!Number.isInteger(id) || id <= 0) {
       res.status(400).json({ error: 'Invalid category ID.' });
@@ -523,15 +534,15 @@ async function startServer(): Promise<void> {
       return;
     }
 
-    const updated = updateCategoryRecord(id, parsed.data);
+    const updated = await updateCategoryRecord(id, parsed.data);
     if (!updated) {
       res.status(404).json({ error: 'Category not found.' });
       return;
     }
     res.json({ category: updated });
-  });
+  }));
 
-  app.patch('/api/admin/config', requireAdminAuth, (req, res) => {
+  app.patch('/api/admin/config', requireAdminAuth, asyncRoute(async (req, res) => {
     const configPatchSchema = z.object({
       serviceLocation: z.string().trim().min(3).max(200).optional(),
       email: z.string().trim().email().optional(),
@@ -548,12 +559,12 @@ async function startServer(): Promise<void> {
       return;
     }
 
-    const updated = updateWorkshopConfig(parsed.data);
+    const updated = await updateWorkshopConfig(parsed.data);
     res.json(updated);
-  });
+  }));
 
-  app.get('/api/admin/requests/export', requireAdminAuth, (_req, res) => {
-    const requests = listAllServiceRequests();
+  app.get('/api/admin/requests/export', requireAdminAuth, asyncRoute(async (_req, res) => {
+    const requests = await listAllServiceRequests();
     const headers = [
       'Reference',
       'Status',
@@ -610,6 +621,15 @@ async function startServer(): Promise<void> {
       `attachment; filename="pagawaan-requests-${new Date().toISOString().slice(0, 10)}.csv"`
     );
     res.send(lines.join('\r\n'));
+  }));
+
+  app.use((error: unknown, req: Request, res: Response, next: NextFunction) => {
+    if (res.headersSent) {
+      next(error);
+      return;
+    }
+    console.error(`Unhandled API error for ${req.method} ${req.path}:`, error);
+    res.status(500).json({ error: 'An unexpected server error occurred.' });
   });
 
   // Mount Vite or Static Dist
