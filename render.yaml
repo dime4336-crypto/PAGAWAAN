@@ -11,6 +11,8 @@ services:
         value: production
       - key: DB_PATH
         value: /tmp/pagawaan.db
+      - key: FRONTEND_ORIGIN
+        sync: false
       - key: ADMIN_ACCESS_KEY
         generateValue: true
       - key: SESSION_SECRET

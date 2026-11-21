@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ListOrdered, Loader2, X } from 'lucide-react';
+import { apiFetch } from '../config/api';
 import type { PublicQueueItem } from '../types/pagawaan';
 
 const REFRESH_INTERVAL_MS = 30_000;
@@ -12,7 +13,7 @@ export function PublicQueue({ refreshToken }: { refreshToken: number }) {
 
   const loadQueue = useCallback(async () => {
     try {
-      const response = await fetch('/api/queue');
+      const response = await apiFetch('/api/queue');
       if (!response.ok) {
         throw new Error('Unable to load the service queue. Please try again.');
       }

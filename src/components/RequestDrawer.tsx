@@ -12,6 +12,7 @@ import {
   X,
 } from 'lucide-react';
 import { formatPHP } from '../config/pricing';
+import { apiFetch } from '../config/api';
 import {
   SERVICE_METHODS,
   customerRequestSchema,
@@ -84,7 +85,7 @@ export function RequestDrawer({
   const onSubmitFinal = async (customerData: CustomerRequestFormValues) => {
     setSubmitError(null);
     try {
-      const response = await fetch('/api/requests', {
+      const response = await apiFetch('/api/requests', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

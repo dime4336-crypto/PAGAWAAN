@@ -10,6 +10,7 @@ import {
   Tag,
 } from 'lucide-react';
 import { formatPHP } from '../config/pricing';
+import { apiFetch } from '../config/api';
 import type { MarketplaceCondition, MarketplaceListing } from '../types/pagawaan';
 import { ActionPinDialog } from './ActionPinDialog';
 
@@ -90,7 +91,7 @@ export function ForSaleMarketplace({ sellerPhone, sellerEmail }: {
     setLoading(true);
     setLoadError(null);
     try {
-      const response = await fetch('/api/marketplace');
+      const response = await apiFetch('/api/marketplace');
       if (!response.ok) throw await responseError(response, 'Unable to load For Sale listings.');
       const data = (await response.json()) as { listings: MarketplaceListing[] };
       setListings(data.listings);
@@ -155,7 +156,7 @@ export function ForSaleMarketplace({ sellerPhone, sellerEmail }: {
       title: 'Publish listing',
       description: 'Enter the admin PIN to publish this item on the For Sale page.',
       confirm: async (pin) => {
-        const response = await fetch('/api/marketplace', {
+        const response = await apiFetch('/api/marketplace', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -182,7 +183,7 @@ export function ForSaleMarketplace({ sellerPhone, sellerEmail }: {
       title: 'Mark item as sold',
       description: `Mark “${listing.title}” as sold? Enter the admin PIN to confirm.`,
       confirm: async (pin) => {
-        const response = await fetch(`/api/marketplace/${listing.id}/status`, {
+        const response = await apiFetch(`/api/marketplace/${listing.id}/status`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ status: 'Sold', pin }),
@@ -415,7 +416,29 @@ export function ForSaleMarketplace({ sellerPhone, sellerEmail }: {
               Retry
             </button>
           </div>
-        ) : !loading && filteredListings.length === 0 ? (
+        ) : loading ? (
+          <div
+            role="status"
+            aria-label="Loading listings"
+            className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+          >
+            {Array.from({ length: 8 }).map((_, index) => (
+              <div
+                key={index}
+                aria-hidden="true"
+                className="animate-pulse overflow-hidden border border-[#EDE6D6]/10 bg-[#141312]"
+              >
+                <div className="aspect-[4/3] bg-[#23201D]" />
+                <div className="space-y-3 p-4">
+                  <div className="h-3 w-1/3 bg-[#23201D]" />
+                  <div className="h-5 w-4/5 bg-[#23201D]" />
+                  <div className="h-4 w-1/2 bg-[#23201D]" />
+                  <div className="h-3 w-2/3 bg-[#23201D]" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : filteredListings.length === 0 ? (
           <div className="mt-8 border border-[#EDE6D6]/10 bg-[#141312] px-5 py-16 text-center">
             <ShoppingBag className="mx-auto h-8 w-8 text-[#D97724]" aria-hidden="true" />
             <h2 className="mt-3 font-display text-lg font-semibold text-[#EDE6D6]">

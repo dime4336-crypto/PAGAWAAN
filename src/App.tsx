@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { AnimatePresence, MotionConfig, motion, useReducedMotion } from 'motion/react';
 import { CheckCircle2 } from 'lucide-react';
 import { DEFAULT_WORKSHOP_CONFIG, type WorkshopContactConfig } from './config/workshop';
+import { apiFetch } from './config/api';
 import {
   getSitePageFromPath,
   SITE_PAGE_PATHS,
@@ -58,8 +59,8 @@ export default function App() {
     setCatalogError(null);
     try {
       const [catRes, cfgRes] = await Promise.all([
-        fetch('/api/catalog'),
-        fetch('/api/config'),
+        apiFetch('/api/catalog'),
+        apiFetch('/api/config'),
       ]);
       if (!catRes.ok) {
         throw new Error('Could not reach the service catalog.');

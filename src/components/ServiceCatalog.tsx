@@ -197,12 +197,29 @@ export function ServiceCatalog({
 
         {/* Loading / Error / Empty / Catalog */}
         {loading ? (
-          <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <div
+            role="status"
+            aria-label="Loading service catalog"
+            className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3"
+          >
             {Array.from({ length: 6 }).map((_, idx) => (
               <div
                 key={idx}
-                className="h-56 animate-pulse border border-[#EDE6D6]/10 bg-[#23201D]"
-              />
+                aria-hidden="true"
+                className="animate-pulse border border-[#EDE6D6]/10 bg-[#141312] p-5"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="h-4 w-4 bg-[#23201D]" />
+                  <div className="h-3 w-16 bg-[#23201D]" />
+                </div>
+                <div className="mt-7 h-5 w-3/4 bg-[#23201D]" />
+                <div className="mt-4 h-3 w-full bg-[#23201D]" />
+                <div className="mt-2 h-3 w-5/6 bg-[#23201D]" />
+                <div className="mt-8 flex items-center justify-between border-t border-[#EDE6D6]/10 pt-4">
+                  <div className="h-4 w-24 bg-[#23201D]" />
+                  <div className="h-8 w-20 bg-[#23201D]" />
+                </div>
+              </div>
             ))}
           </div>
         ) : error ? (

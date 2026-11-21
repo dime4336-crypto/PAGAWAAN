@@ -12,6 +12,7 @@ import {
   Send,
 } from 'lucide-react';
 import { formatPHP } from '../config/pricing';
+import { apiFetch } from '../config/api';
 import type { WorkshopContactConfig } from '../config/workshop';
 import { ActionPinDialog } from './ActionPinDialog';
 import {
@@ -90,8 +91,8 @@ export function AdminDashboard({
     setDataError(null);
     try {
       const [reqRes, catRes] = await Promise.all([
-        fetch('/api/admin/requests'),
-        fetch('/api/admin/catalog'),
+        apiFetch('/api/admin/requests'),
+        apiFetch('/api/admin/catalog'),
       ]);
       if (reqRes.status === 401 || catRes.status === 401) {
         setAuthenticated(false);
@@ -130,7 +131,7 @@ export function AdminDashboard({
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch('/api/admin/session');
+        const res = await apiFetch('/api/admin/session');
         const data = await res.json();
         setAuthenticated(Boolean(data.authenticated));
         if (data.authenticated) {
@@ -149,7 +150,7 @@ export function AdminDashboard({
     setAuthError(null);
     setAuthLoading(true);
     try {
-      const res = await fetch('/api/admin/login', {
+      const res = await apiFetch('/api/admin/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ passcode }),
@@ -170,7 +171,7 @@ export function AdminDashboard({
   };
 
   const handleLogout = async () => {
-    await fetch('/api/admin/logout', { method: 'POST' });
+    await apiFetch('/api/admin/logout', { method: 'POST' });
     setAuthenticated(false);
     setRequests([]);
   };
@@ -196,7 +197,7 @@ export function AdminDashboard({
   );
 
   const saveRequestStatus = async (requestId: number, status: RequestStatus, pin?: string) => {
-    const response = await fetch(`/api/admin/requests/${requestId}`, {
+    const response = await apiFetch(`/api/admin/requests/${requestId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status, ...(pin ? { pin } : {}) }),
@@ -229,7 +230,7 @@ export function AdminDashboard({
       title: 'Update queue progress',
       description: `Enter the admin PIN to change this request to “${queueStatus}”.`,
       confirm: async (pin) => {
-        const response = await fetch(`/api/admin/requests/${requestId}/queue-status`, {
+        const response = await apiFetch(`/api/admin/requests/${requestId}/queue-status`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ queueStatus, pin }),
@@ -250,7 +251,7 @@ export function AdminDashboard({
     if (!selectedRequest || !newNote.trim()) return;
     setSavingNote(true);
     try {
-      const res = await fetch(`/api/admin/requests/${selectedRequest.id}/notes`, {
+      const res = await apiFetch(`/api/admin/requests/${selectedRequest.id}/notes`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ note: newNote }),
@@ -272,7 +273,7 @@ export function AdminDashboard({
     const nextPrice = Math.max(0, Math.round(Number(priceEdits[service.id] ?? service.startingPrice)));
     const nextTurnaround = turnaroundEdits[service.id] ?? service.turnaroundEstimate;
 
-    const res = await fetch(`/api/admin/services/${service.id}`, {
+    const res = await apiFetch(`/api/admin/services/${service.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -289,7 +290,7 @@ export function AdminDashboard({
   };
 
   const handleToggleService = async (service: ServiceItem) => {
-    const res = await fetch(`/api/admin/services/${service.id}`, {
+    const res = await apiFetch(`/api/admin/services/${service.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ isActive: !service.isActive }),
@@ -307,7 +308,7 @@ export function AdminDashboard({
   const handleCreateCategory = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newCatName.trim() || !newCatSlug.trim()) return;
-    const res = await fetch('/api/admin/categories', {
+    const res = await apiFetch('/api/admin/categories', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -331,7 +332,7 @@ export function AdminDashboard({
   };
 
   const handleToggleCategory = async (cat: ServiceCategory) => {
-    const res = await fetch(`/api/admin/categories/${cat.id}`, {
+    const res = await apiFetch(`/api/admin/categories/${cat.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ isActive: !cat.isActive }),
@@ -346,7 +347,7 @@ export function AdminDashboard({
 
   const handleSaveConfig = async (e: React.FormEvent) => {
     e.preventDefault();
-    const res = await fetch('/api/admin/config', {
+    const res = await apiFetch('/api/admin/config', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

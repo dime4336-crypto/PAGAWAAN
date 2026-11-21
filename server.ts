@@ -41,6 +41,12 @@ const ADMIN_ACCESS_KEY = process.env.ADMIN_ACCESS_KEY || 'pagawaan-bench-2026';
 const SESSION_SECRET =
   process.env.SESSION_SECRET ||
   crypto.createHash('sha256').update(`pagawaan-${ADMIN_ACCESS_KEY}-secret`).digest('hex');
+const FRONTEND_ORIGINS = new Set(
+  (process.env.FRONTEND_ORIGIN || '')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean)
+);
 
 const rateLimitStore = new Map<string, { count: number; windowStart: number }>();
 const actionPinAttemptStore = new Map<string, { count: number; windowStart: number }>();
@@ -146,6 +152,21 @@ function escapeCsvCell(value: unknown): string {
 async function startServer(): Promise<void> {
   const app = express();
   app.set('trust proxy', 1);
+  app.use((req, res, next) => {
+    const origin = req.get('Origin');
+    if (origin && FRONTEND_ORIGINS.has(origin)) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+      res.setHeader('Vary', 'Origin');
+      res.setHeader('Access-Control-Allow-Credentials', 'true');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    }
+    if (req.method === 'OPTIONS') {
+      res.sendStatus(origin && FRONTEND_ORIGINS.has(origin) ? 204 : 403);
+      return;
+    }
+    next();
+  });
   app.use(express.json({ limit: '10mb' }));
   app.use(cookieParser());
 
@@ -326,7 +347,7 @@ async function startServer(): Promise<void> {
 
     res.cookie(ADMIN_COOKIE_NAME, token, {
       httpOnly: true,
-      sameSite: 'lax',
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
       secure: process.env.NODE_ENV === 'production',
       maxAge: 12 * 60 * 60 * 1000,
       path: '/',
