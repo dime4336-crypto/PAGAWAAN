@@ -141,353 +141,197 @@ function seedWorkshopConfigIfEmpty(): void {
 }
 
 function seedCatalogIfEmpty(): void {
-  const countRow = sqlite.prepare('SELECT COUNT(*) as cnt FROM service_categories').get() as {
-    cnt: number;
-  };
-  if (countRow.cnt > 0) return;
-
-  const insertCategory = sqlite.prepare(`
+  const upsertCategory = sqlite.prepare(`
     INSERT INTO service_categories (slug, name, description, sort_order, is_active)
     VALUES (?, ?, ?, ?, 1)
+    ON CONFLICT(slug) DO UPDATE SET
+      name = excluded.name,
+      description = excluded.description,
+      sort_order = excluded.sort_order
   `);
 
-  const insertService = sqlite.prepare(`
+  const upsertService = sqlite.prepare(`
     INSERT INTO services (
       category_id, slug, name, description, details, starting_price,
       pricing_type, turnaround_estimate, configurator_type, supports_quantity, is_active
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+    ON CONFLICT(slug) DO UPDATE SET
+      category_id = excluded.category_id,
+      name = excluded.name,
+      description = excluded.description,
+      details = excluded.details,
+      starting_price = excluded.starting_price,
+      pricing_type = excluded.pricing_type,
+      turnaround_estimate = excluded.turnaround_estimate,
+      configurator_type = excluded.configurator_type,
+      supports_quantity = excluded.supports_quantity,
+      is_active = 1
   `);
 
+  type ServiceSeed = [
+    number,
+    string,
+    string,
+    string,
+    string,
+    number,
+    string,
+    string,
+    string,
+    number,
+  ];
+
   const tx = sqlite.transaction(() => {
-    const cat1 = Number(
-      insertCategory.run(
-        'computer-laptop',
-        'Computer & Laptop Services',
-        'Hardware diagnostics, OS recovery, thermal maintenance, and component upgrades.',
-        1
-      ).lastInsertRowid
-    );
-    const cat2 = Number(
-      insertCategory.run(
-        'networking-ethernet',
-        'Networking & Ethernet',
-        'Custom RJ45 termination, structured cabling, testing, and LAN configuration.',
-        2
-      ).lastInsertRowid
-    );
-    const cat3 = Number(
-      insertCategory.run(
-        'mobile-assistance',
-        'Mobile Device Assistance',
-        'Legitimate device setup, data migration, backup hygiene, and official account help.',
-        3
-      ).lastInsertRowid
-    );
-    const cat4 = Number(
-      insertCategory.run(
-        'software-development',
-        'Software Development',
-        'Python automation, custom web applications, databases, and site maintenance.',
-        4
-      ).lastInsertRowid
+    const categories: Array<[string, string, string, number]> = [
+      ['computer-laptop', 'Computer & Laptop Services', 'Diagnostics, troubleshooting, repair, upgrades, cleaning, and system recovery.', 1],
+      ['networking-ethernet', 'Networking & Ethernet', 'Cable termination, fabrication, testing, routing, labeling, and LAN cabling.', 2],
+      ['network-router', 'Router & Network Configuration', 'Router, Wi-Fi, LAN, switch, printer, sharing, and network maintenance setup.', 3],
+      ['mobile-assistance', 'Mobile Device Assistance', 'Phone setup, data transfer, backup, account assistance, and software troubleshooting.', 4],
+      ['phone-hardware', 'Phone Hardware Repair', 'Screen, battery, charging port, speaker, and camera replacement labor.', 5],
+      ['data-storage', 'Data Backup & Storage', 'Backup, storage setup, migration, health assessment, wiping, and recovery assessment.', 6],
+      ['software-development', 'Software & Web Development', 'Websites, automation, reports, databases, dashboards, integrations, and custom applications.', 7],
+      ['additional-services', 'Additional Services', 'Remote assistance, callouts, urgent service, after-hours support, and device pickup/delivery.', 8],
+      ['service-packages', 'Service Packages', 'Predefined bundled services at a fixed Pagawaan package price.', 9],
+    ];
+    for (const category of categories) upsertCategory.run(...category);
+
+    const categoryId = (slug: string): number => Number(
+      (sqlite.prepare('SELECT id FROM service_categories WHERE slug = ?').get(slug) as { id: number }).id
     );
 
-    const servicesSeed: Array<
-      [number, string, string, string, string, number, string, string, string, number]
-    > = [
-      [
-        cat1,
-        'basic-diagnostics',
-        'Basic Diagnostics',
-        'Structured hardware and software fault isolation for desktops and laptops.',
-        'Includes POST verification, SMART storage health check, thermal inspection, and a clear written fault assessment before any repair proceeds.',
-        150,
-        'fixed_starting',
-        'Est. 1–2 hours',
-        'pc_troubleshooting',
-        1,
-      ],
-      [
-        cat1,
-        'pc-software-troubleshooting',
-        'Software Troubleshooting',
-        'Resolve OS boot errors, driver conflicts, crashing apps, and startup issues.',
-        'Targeted troubleshooting of Windows or Linux environment issues, corrupted registries, or stubborn driver mismatches.',
-        250,
-        'fixed_starting',
-        'Est. 2–4 hours',
-        'pc_troubleshooting',
-        1,
-      ],
-      [
-        cat1,
-        'pc-optimization',
-        'PC Optimization',
-        'Clean startup bloat, tune power profiles, verify storage health, and tidy updates.',
-        'Improves everyday responsiveness without risky third-party cleaners or unwanted data removal.',
-        350,
-        'fixed_starting',
-        'Est. 2–3 hours',
-        'pc_troubleshooting',
-        1,
-      ],
-      [
-        cat1,
-        'windows-installation',
-        'Windows Installation',
-        'Clean OS installation, chipset drivers, essential utilities, and partition setup.',
-        'Optional pre-install personal file backup available. Uses customer-owned or factory digital license.',
-        500,
-        'fixed_starting',
-        'Est. 2–4 hours',
-        'windows_install',
-        1,
-      ],
-      [
-        cat1,
-        'ram-ssd-installation',
-        'RAM / SSD Installation',
-        'Careful physical installation of customer-supplied or sourced RAM and NVMe/SATA drives.',
-        'Labor starting rate; hardware parts are quoted separately if Pagawaan sources them.',
-        200,
-        'fixed_starting',
-        'Est. 45–90 mins',
-        'general_service',
-        1,
-      ],
-      [
-        cat1,
-        'laptop-cleaning',
-        'Laptop Cleaning',
-        'Internal dust extraction from fans, heatsink fins, chassis vents, and keyboard.',
-        'Reduces thermal throttling and fan noise using ESD-safe brushes and precision disassembly tools.',
-        350,
-        'fixed_starting',
-        'Est. 1–2 hours',
-        'general_service',
-        1,
-      ],
-      [
-        cat1,
-        'thermal-paste-replacement',
-        'Thermal Paste Replacement',
-        'Heatsink cleaning and fresh application of high-conductivity thermal compound.',
-        'Recommended when laptops run hot under light load or after years of dried factory paste.',
-        350,
-        'fixed_starting',
-        'Est. 1–2 hours',
-        'general_service',
-        1,
-      ],
-      [
-        cat2,
-        'rj45-termination-one-end',
-        'RJ45 Termination — One End',
-        'Precision re-crimp of a damaged or broken RJ45 modular plug on one cable end.',
-        'Terminated to T568B standard and verified on an 8-wire continuity tester.',
-        50,
-        'per_unit',
-        'Est. 15–30 mins',
-        'rj45_repair',
-        1,
-      ],
-      [
-        cat2,
-        'rj45-termination-both-ends',
-        'RJ45 Termination — Both Ends',
-        'Fresh RJ45 plugs crimped on both ends of an existing Cat5e or Cat6 cable.',
-        'Ideal for trimming excess cable slack or replacing worn plugs on both terminations.',
-        100,
-        'per_unit',
-        'Est. 20–40 mins',
-        'rj45_repair',
-        1,
-      ],
-      [
-        cat2,
-        'custom-ethernet-cable',
-        'Custom Ethernet Cable',
-        'Made-to-length Cat5e or Cat6 patch cable with tested RJ45 connectors.',
-        'Final estimate scales with cable category, exact meter length, connector boot type, and quantity.',
-        100,
-        'cable_formula',
-        'Est. same day / next day',
-        'custom_cable',
-        1,
-      ],
-      [
-        cat2,
-        'ethernet-cable-testing',
-        'Ethernet Cable Testing',
-        'Pin-by-pin wiremap verification for shorts, opens, split pairs, or crossed wires.',
-        'Diagnoses intermittent link drops before spending on unnecessary full cable replacement.',
-        50,
-        'per_unit',
-        'Est. 15 mins',
-        'rj45_repair',
-        1,
-      ],
-      [
-        cat2,
-        'router-configuration',
-        'Router Configuration',
-        'SSID setup, WPA2/WPA3 hardening, DNS tuning, guest network, and firmware check.',
-        'Tailored for home offices, studios, or secondary access point / bridge setups.',
-        300,
-        'fixed_starting',
-        'Est. 1–2 hours',
-        'network_install',
-        0,
-      ],
-      [
-        cat2,
-        'basic-lan-setup',
-        'Basic LAN Setup',
-        'Interconnect router, switch, and wired workstations for reliable local sharing.',
-        'Covers port patching, static LAN IPs for shared printers or NAS, and link verification.',
-        500,
-        'fixed_starting',
-        'Est. 2–4 hours',
-        'network_install',
-        0,
-      ],
-      [
-        cat2,
-        'ethernet-installation',
-        'Ethernet Installation',
-        'Structured multi-room cable routing, surface trunking, and wall termination.',
-        'Quoted after assessing room count, approximate run length, and mounting conditions.',
-        0,
-        'custom_quote',
-        'Quoted after survey',
-        'network_install',
-        0,
-      ],
-      [
-        cat3,
-        'phone-setup',
-        'Phone Setup',
-        'Clean initial setup, essential app installation, storage organization, and settings review.',
-        'Tailored for new devices, family handsets, or clean work-ready phone profiles.',
-        200,
-        'fixed_starting',
-        'Est. 1–2 hours',
-        'general_service',
-        1,
-      ],
-      [
-        cat3,
-        'data-transfer',
-        'Data Transfer',
-        'Guided migration of photos, contacts, documents, and messages between devices.',
-        'Handled securely with full verification before wiping or trading in the source device.',
-        200,
-        'fixed_starting',
-        'Est. 1–3 hours',
-        'general_service',
-        1,
-      ],
-      [
-        cat3,
-        'backup-assistance',
-        'Backup Assistance',
-        'Configure cloud or local encrypted backups so important photos and files stay safe.',
-        'Includes a plain-language walkthrough so you know how to verify and restore backups yourself.',
-        200,
-        'fixed_starting',
-        'Est. 1–2 hours',
-        'general_service',
-        1,
-      ],
-      [
-        cat3,
-        'mobile-software-troubleshooting',
-        'Software Troubleshooting',
-        'Fix storage bloat, misbehaving apps, sync errors, and update failures.',
-        'Software-level diagnostics without destructive factory resets unless explicitly requested.',
-        250,
-        'fixed_starting',
-        'Est. 1–2 hours',
-        'general_service',
-        1,
-      ],
-      [
-        cat3,
-        'official-account-recovery',
-        'Official Account Recovery Assistance',
-        'Legitimate guided recovery through official Google, Apple, or Microsoft recovery channels.',
-        'Authorized account owners only. Pagawaan never performs unauthorized security or lock bypassing.',
-        0,
-        'custom_quote',
-        'Depends on provider review',
-        'general_service',
-        0,
-      ],
-      [
-        cat4,
-        'python-automation',
-        'Python Automation',
-        'Custom scripts for spreadsheet cleanup, file sorting, data parsing, or routine reports.',
-        'Eliminates repetitive manual computer tasks with documented, maintainable scripts.',
-        500,
-        'fixed_starting',
-        'Est. 2–5 days',
-        'website_dev',
-        0,
-      ],
-      [
-        cat4,
-        'website-development',
-        'Website Development',
-        'Custom-designed, fast, responsive websites built without bloated templates.',
-        'Ideal for local businesses, service catalogs, portfolios, and custom quotation forms.',
-        1500,
-        'fixed_starting',
-        'Est. 5–14 days',
-        'website_dev',
-        0,
-      ],
-      [
-        cat4,
-        'database-setup',
-        'Database Setup',
-        'Clean relational PostgreSQL or SQLite schema design, constraints, and backup workflows.',
-        'Built for inventory ledgers, service queues, and structured operational records.',
-        800,
-        'fixed_starting',
-        'Est. 2–4 days',
-        'website_dev',
-        0,
-      ],
-      [
-        cat4,
-        'custom-software',
-        'Custom Software',
-        'Bespoke internal dashboards, quotation tools, or hardware-connected web utilities.',
-        'Scoped and quoted collaboratively around your exact operational workflow.',
-        0,
-        'custom_quote',
-        'Quoted after scoping',
-        'website_dev',
-        0,
-      ],
-      [
-        cat4,
-        'website-maintenance',
-        'Website Maintenance',
-        'Monthly uptime checks, dependency patches, content edits, and backup verification.',
-        'Monthly maintenance plan; scope and billing cadence confirmed before activation.',
-        500,
-        'monthly',
-        'Ongoing monthly',
-        'website_dev',
-        0,
-      ],
+    const fixed = (
+      start: number,
+      turnaround = 'Est. upon assessment',
+      configurator = 'general_service',
+      quantity = 1,
+    ): ServiceSeed[number][] =>
+      [start, 'fixed_starting', turnaround, configurator, quantity];
+
+    const services: ServiceSeed[] = [
+      [categoryId('computer-laptop'), 'basic-computer-diagnostics', 'Basic Computer Diagnostics', 'Hardware and software fault isolation.', 'POST, startup, hardware, thermal, and baseline storage assessment.', ...fixed(250, '1–2 hours')],
+      [categoryId('computer-laptop'), 'software-troubleshooting', 'Software Troubleshooting', 'Resolve software crashes, conflicts, and OS errors.', 'Targeted diagnosis and removal of the identified software fault.', ...fixed(350, '2–4 hours', 'pc_troubleshooting')],
+      [categoryId('computer-laptop'), 'slow-pc-optimization', 'Slow PC Optimization', 'Improve startup and everyday PC responsiveness.', 'Startup cleanup, settings tuning, updates, and storage checks.', ...fixed(500, '2–3 hours', 'pc_troubleshooting')],
+      [categoryId('computer-laptop'), 'windows-error-troubleshooting', 'Windows Error Troubleshooting', 'Diagnose and resolve Windows system errors.', 'Troubleshooting for update, driver, application, and system errors.', ...fixed(350, '1–3 hours', 'pc_troubleshooting')],
+      [categoryId('computer-laptop'), 'blue-screen-troubleshooting', 'Blue Screen Troubleshooting', 'Identify the cause of stop errors and repeated crashes.', 'Crash dump review, driver and hardware fault isolation, and corrective action.', ...fixed(400, '2–4 hours', 'pc_troubleshooting')],
+      [categoryId('computer-laptop'), 'boot-failure-troubleshooting', 'Boot Failure Troubleshooting', 'Restore failed or unbootable systems.', 'Diagnosis of boot records, storage devices, firmware, and startup configuration.', ...fixed(400, '2–4 hours', 'pc_troubleshooting')],
+      [categoryId('computer-laptop'), 'virus-malware-removal', 'Virus and Malware Removal', 'Clean infected systems and remove malicious software.', 'Malware scanning, cleanup, browser reset, security review, and protection setup.', ...fixed(600, '3–6 hours', 'pc_troubleshooting')],
+      [categoryId('computer-laptop'), 'windows-reinstallation', 'Windows Reinstallation', 'Clean Windows installation and essential setup.', 'OS installation, drivers, updates, and baseline configuration.', ...fixed(700, '2–4 hours', 'windows_install')],
+      [categoryId('computer-laptop'), 'windows-installation-with-backup', 'Windows Installation with Backup', 'Back up data, reinstall Windows, and restore saved files.', 'Backup is completed before OS installation; license requirements apply.', ...fixed(900, '4–8 hours', 'windows_install')],
+      [categoryId('computer-laptop'), 'driver-installation', 'Driver Installation', 'Install compatible chipset, graphics, audio, and device drivers.', 'Verified driver installation and device-manager review.', ...fixed(200, '1–2 hours')],
+      [categoryId('computer-laptop'), 'software-installation', 'Software Installation', 'Install and configure customer-approved software.', 'Setup and basic verification of requested applications.', ...fixed(150, '30–90 mins')],
+      [categoryId('computer-laptop'), 'startup-optimization', 'Startup Optimization', 'Reduce startup delays and remove unnecessary launch items.', 'Review startup applications and tune startup behavior.', ...fixed(300, '1–2 hours', 'pc_troubleshooting')],
+      [categoryId('computer-laptop'), 'system-updates-configuration', 'System Updates and Configuration', 'Apply OS updates and configure system settings.', 'Windows updates, privacy and power settings, and security configuration.', ...fixed(300, '1–3 hours')],
+      [categoryId('computer-laptop'), 'ssd-installation-labor', 'SSD Installation (Labor)', 'Install a customer-provided SSD.', 'Hardware installation and post-install verification; SSD sold separately.', ...fixed(350, '1–2 hours')],
+      [categoryId('computer-laptop'), 'ram-installation-labor', 'RAM Installation (Labor)', 'Install compatible customer-provided memory.', 'Physical installation and boot verification; RAM sold separately.', ...fixed(250, '45–90 mins')],
+      [categoryId('computer-laptop'), 'ssd-cloning-migration', 'SSD Cloning and Migration', 'Clone an existing system or migrate data to an SSD.', 'Source and destination health checks, cloning, and boot verification.', ...fixed(600, '3–6 hours')],
+      [categoryId('computer-laptop'), 'custom-pc-assembly', 'Custom PC Assembly', 'Assemble a custom PC from customer-selected components.', 'Component inspection, assembly, cable routing, BIOS setup, and testing.', ...fixed(1000, '4–8 hours')],
+      [categoryId('computer-laptop'), 'pc-cable-management', 'PC Cable Management', 'Improve internal cable routing and airflow presentation.', 'Cable repositioning, tie-down, and visual cleanup inside the chassis.', ...fixed(400, '1–3 hours')],
+      [categoryId('computer-laptop'), 'desktop-preventive-maintenance', 'Desktop Preventive Maintenance', 'Clean and inspect a desktop computer.', 'Internal dust removal, fan check, contact review, and software health check.', ...fixed(700, '2–4 hours')],
+      [categoryId('computer-laptop'), 'laptop-internal-cleaning', 'Laptop Internal Cleaning', 'Clean dust and debris from laptop internals.', 'ESD-safe internal disassembly, fan and heatsink cleaning.', ...fixed(800, '2–4 hours')],
+      [categoryId('computer-laptop'), 'desktop-internal-cleaning', 'Desktop Internal Cleaning', 'Remove dust and inspect desktop cooling components.', 'Case, fan, heatsink, filters, and vent cleaning.', ...fixed(600, '1–3 hours')],
+      [categoryId('computer-laptop'), 'thermal-paste-replacement', 'Thermal Paste Replacement', 'Replace processor thermal compound.', 'CPU/GPU heatsink cleaning and fresh thermal compound application.', ...fixed(500, '1–3 hours')],
+      [categoryId('computer-laptop'), 'full-laptop-cleaning-thermal-paste', 'Full Laptop Cleaning + Thermal Paste', 'Complete internal cleaning and thermal compound replacement.', 'Full dust removal, cooling inspection, heatsink service, and stress check.', ...fixed(1000, '3–5 hours')],
+      [categoryId('computer-laptop'), 'pc-no-display-troubleshooting', 'PC No-Display Troubleshooting', 'Diagnose a PC with no monitor output.', 'Cable, GPU, RAM, BIOS, display, and motherboard fault isolation.', ...fixed(350, '1–3 hours', 'pc_troubleshooting')],
+      [categoryId('computer-laptop'), 'pc-no-power-troubleshooting', 'PC No-Power Troubleshooting', 'Find why a desktop or laptop will not power on.', 'Power adapter, PSU, switch, battery, board, and protection fault checks.', ...fixed(350, '1–3 hours', 'pc_troubleshooting')],
+
+      [categoryId('networking-ethernet'), 'rj45-retermination-one-end', 'RJ45 Retermination, One End', 'Replace or repair one RJ45 cable end.', 'T568 termination and continuity verification.', ...fixed(100, '15–30 mins', 'rj45_repair')],
+      [categoryId('networking-ethernet'), 'rj45-retermination-both-ends', 'RJ45 Retermination, Both Ends', 'Replace or repair both RJ45 cable ends.', 'Both ends terminated and continuity-tested.', ...fixed(150, '20–40 mins', 'rj45_repair')],
+      [categoryId('networking-ethernet'), 'ethernet-continuity-testing', 'Ethernet Cable Continuity Testing', 'Test cable wiremap and signal pin continuity.', 'Pin-by-pin testing for shorts, opens, and crossed pairs.', ...fixed(100, '15 mins', 'rj45_repair')],
+      [categoryId('networking-ethernet'), 'cable-fault-diagnosis', 'Cable Fault Diagnosis', 'Identify damaged or poorly terminated network cabling.', 'Visual, continuity, and link-fault assessment.', ...fixed(150, '30–60 mins', 'network_install')],
+      [categoryId('networking-ethernet'), 'custom-cat5e-cable', 'Custom Cat5e Cable', 'Made-to-length Cat5e Ethernet cable.', 'Cable fabrication priced per meter and availability confirmed.', ...fixed(20, 'Same day / next day', 'custom_cable')],
+      [categoryId('networking-ethernet'), 'custom-cat6-cable', 'Custom Cat6 Cable', 'Made-to-length Cat6 Ethernet cable.', 'Cable fabrication priced per meter and availability confirmed.', ...fixed(25, 'Same day / next day', 'custom_cable')],
+      [categoryId('networking-ethernet'), 'cable-fabrication-labor', 'Cable Fabrication Labor', 'Labor for fabrication and assembly of network cable.', 'Termination and testing labor for one cable job.', ...fixed(50, '15–60 mins', 'rj45_repair')],
+      [categoryId('networking-ethernet'), 'cable-organization', 'Cable Organization', 'Organize loose or tangled network cables.', 'Routing, bundling, labeling, and dressing of existing cables.', ...fixed(300, '1–3 hours')],
+      [categoryId('networking-ethernet'), 'ethernet-cable-installation', 'Ethernet Cable Installation', 'Install one or more Ethernet cable runs.', 'Survey, routing, termination, and basic link testing.', ...fixed(500, 'Quoted after survey', 'network_install')],
+      [categoryId('networking-ethernet'), 'wall-to-wall-cable-routing', 'Wall-to-Wall Cable Routing', 'Route Ethernet cabling between rooms or end points.', 'Routing is quoted after length, access, and wall conditions are assessed.', ...fixed(500, 'Quoted after survey', 'network_install')],
+      [categoryId('networking-ethernet'), 'keystone-jack-termination', 'Keystone Jack Termination', 'Terminate Ethernet at a wall or patch keystone jack.', 'T568 termination and port continuity testing.', ...fixed(150, '20–40 mins/port', 'rj45_repair')],
+      [categoryId('networking-ethernet'), 'patch-panel-termination', 'Patch Panel Termination', 'Terminate and organize Ethernet ports at a patch panel.', 'Punch-down, labeling, and port testing.', ...fixed(100, '20–40 mins/port', 'rj45_repair')],
+      [categoryId('networking-ethernet'), 'network-cable-labeling', 'Network Cable Labeling', 'Label cables and network endpoints.', 'Consistent labels for easier tracing and maintenance.', ...fixed(150, '1–2 hours')],
+      [categoryId('networking-ethernet'), 'ethernet-cable-replacement', 'Ethernet Cable Replacement', 'Replace damaged or unsuitable Ethernet cable.', 'Replacement scope requires a site or cable assessment.', 0, 'custom_quote', 'Quoted after assessment', 'network_install', 0],
+      [categoryId('networking-ethernet'), 'lan-connectivity-troubleshooting', 'LAN Connectivity Troubleshooting', 'Diagnose wired local network connection issues.', 'Link, switch, cable, IP, and endpoint testing.', ...fixed(300, '1–3 hours', 'network_install')],
+
+      [categoryId('network-router'), 'router-initial-configuration', 'Router Initial Configuration', 'Set up a router for first-time use.', 'Internet, SSID, security, firmware, and basic network setup.', ...fixed(350, '1–2 hours', 'network_install')],
+      [categoryId('network-router'), 'router-troubleshooting', 'Router Troubleshooting', 'Diagnose router and Internet connectivity issues.', 'Device, uplink, firmware, configuration, and wireless checks.', ...fixed(350, '1–3 hours', 'network_install')],
+      [categoryId('network-router'), 'wifi-optimization', 'Wi-Fi Optimization', 'Improve wireless coverage and stability.', 'Channel, placement, band, roaming, and interference review.', ...fixed(400, '1–3 hours', 'network_install')],
+      [categoryId('network-router'), 'wifi-dead-spot-assessment', 'Wi-Fi Dead Spot Assessment', 'Map weak coverage areas and identify causes.', 'Signal measurement and placement or equipment recommendations.', ...fixed(250, '30–90 mins', 'network_install')],
+      [categoryId('network-router'), 'access-point-configuration', 'Access Point Configuration', 'Configure a wired or wireless access point.', 'SSID, VLAN/client settings, security, and link verification.', ...fixed(400, '1–3 hours', 'network_install')],
+      [categoryId('network-router'), 'mesh-wifi-configuration', 'Mesh Wi-Fi Configuration', 'Set up and tune a mesh Wi-Fi system.', 'Node placement, SSID, backhaul, roaming, and coverage testing.', ...fixed(500, '2–4 hours', 'network_install')],
+      [categoryId('network-router'), 'lan-configuration', 'LAN Configuration', 'Configure local network addressing and sharing.', 'Router, switch, DHCP, static IP, and connected-device setup.', ...fixed(500, '1–3 hours', 'network_install')],
+      [categoryId('network-router'), 'basic-home-network-setup', 'Basic Home Network Setup', 'Configure a small home network.', 'Router, devices, Wi-Fi, wired links, and basic security.', ...fixed(800, '2–5 hours', 'network_install')],
+      [categoryId('network-router'), 'small-office-network-setup', 'Small Office Network Setup', 'Set up a reliable office network.', 'Router, switch, wired devices, wireless access, and basic network sharing.', ...fixed(1500, '4–8 hours', 'network_install')],
+      [categoryId('network-router'), 'network-switch-configuration', 'Network Switch Configuration', 'Configure managed or unmanaged network switching.', 'Port, uplink, VLAN, and basic switch settings as supported.', ...fixed(400, '1–3 hours', 'network_install')],
+      [categoryId('network-router'), 'device-network-configuration', 'Device Network Configuration', 'Configure one device for wired or wireless network use.', 'Network profile, IP settings, credentials, and connectivity test.', ...fixed(100, '30–60 mins/device', 'network_install')],
+      [categoryId('network-router'), 'ip-address-configuration', 'IP Address Configuration', 'Configure static or DHCP network addresses.', 'Host addressing, gateway, DNS, and reachability verification.', ...fixed(200, '30–90 mins', 'network_install')],
+      [categoryId('network-router'), 'network-printer-sharing', 'Network Printer Sharing', 'Connect and share a printer over the network.', 'Printer discovery, drivers, sharing, and test print.', ...fixed(350, '1–3 hours', 'network_install')],
+      [categoryId('network-router'), 'file-folder-network-sharing', 'File and Folder Network Sharing', 'Set up controlled local file and folder sharing.', 'Access groups, permissions, mapped folders, and verification.', ...fixed(300, '1–3 hours', 'network_install')],
+      [categoryId('network-router'), 'network-troubleshooting', 'Network Troubleshooting', 'Diagnose router, cable, switch, and device network faults.', 'End-to-end wired and wireless connectivity assessment.', ...fixed(350, '1–3 hours', 'network_install')],
+      [categoryId('network-router'), 'network-cable-management', 'Network Cable Management', 'Organize switches, patch leads, racks, and network cables.', 'Bundling, routing, labeling, and improved access.', ...fixed(400, '1–4 hours')],
+      [categoryId('network-router'), 'network-maintenance', 'Network Maintenance', 'Inspect and maintain a small network.', 'Device review, firmware, backup settings, cabling, and performance checks.', ...fixed(500, '2–4 hours', 'network_install')],
+
+      [categoryId('mobile-assistance'), 'new-phone-setup', 'New Phone Setup', 'Set up a new Android or iOS phone.', 'Account setup, essentials, privacy, updates, and basic configuration.', ...fixed(250, '1–2 hours')],
+      [categoryId('mobile-assistance'), 'phone-data-transfer', 'Data Transfer', 'Move approved data between phones or accounts.', 'Contacts, photos, apps, documents, and settings as supported.', ...fixed(300, '1–3 hours')],
+      [categoryId('mobile-assistance'), 'photo-video-backup', 'Photo/Video Backup', 'Back up phone photos and videos to approved storage.', 'Organized copy and verification without unauthorized deletion.', ...fixed(250, '1–3 hours')],
+      [categoryId('mobile-assistance'), 'google-account-configuration', 'Google Account Configuration', 'Configure Google account and device services.', 'Sync, backup, security, Play services, and account settings.', ...fixed(200, '30–90 mins')],
+      [categoryId('mobile-assistance'), 'apple-account-assistance', 'Apple Account Configuration Assistance', 'Assist with Apple account and iPhone/iPad setup.', 'Apple ID, iCloud, backup, and device settings within official workflows.', ...fixed(200, '30–90 mins')],
+      [categoryId('mobile-assistance'), 'phone-app-installation', 'App Installation and Configuration', 'Install and configure approved applications.', 'Application setup and basic permissions review.', ...fixed(150, '30–90 mins')],
+      [categoryId('mobile-assistance'), 'phone-software-troubleshooting', 'Phone Software Troubleshooting', 'Diagnose app, update, storage, and sync problems.', 'Non-destructive software diagnosis and correction.', ...fixed(300, '1–3 hours')],
+      [categoryId('mobile-assistance'), 'phone-storage-optimization', 'Storage Optimization', 'Free and organize usable phone storage safely.', 'Large-file review, cache/app cleanup, and backup recommendations.', ...fixed(250, '1–2 hours')],
+      [categoryId('mobile-assistance'), 'factory-reset-assistance', 'Factory Reset Assistance', 'Guide an authorized factory reset and restore process.', 'Backup confirmation, official reset procedure, and post-reset setup.', ...fixed(250, '1–3 hours')],
+      [categoryId('mobile-assistance'), 'official-account-recovery-guidance', 'Official Account Recovery Guidance', 'Guide legitimate recovery through official provider channels.', 'Authorized account owners only; no lock bypass or unauthorized access.', ...fixed(300, '30–90 mins')],
+      [categoryId('mobile-assistance'), 'phone-to-pc-transfer', 'Phone-to-PC Data Transfer', 'Transfer approved data from a phone to a computer.', 'Verified cable or wireless transfer and organized storage.', ...fixed(250, '1–2 hours')],
+      [categoryId('mobile-assistance'), 'phone-backup-and-restore', 'Phone Backup and Restore', 'Create a backup or restore from an existing backup.', 'Backup integrity review and authorized restore assistance.', ...fixed(350, '1–3 hours')],
+
+      [categoryId('phone-hardware'), 'phone-screen-replacement', 'Screen Replacement', 'Replace a damaged phone display.', 'Labor for compatible parts; screen and replacement parts quoted separately.', ...fixed(500, '2–4 hours')],
+      [categoryId('phone-hardware'), 'phone-battery-replacement', 'Battery Replacement', 'Replace a worn or faulty phone battery.', 'Labor for compatible battery; battery and consumables quoted separately.', ...fixed(350, '1–3 hours')],
+      [categoryId('phone-hardware'), 'phone-charging-port-replacement', 'Charging Port Replacement', 'Replace a damaged charging or USB-C port.', 'Labor for compatible port; parts and board work quoted separately.', ...fixed(500, '2–4 hours')],
+      [categoryId('phone-hardware'), 'phone-speaker-replacement', 'Speaker Replacement', 'Replace a faulty phone speaker.', 'Labor for compatible speaker; part quoted separately.', ...fixed(350, '1–3 hours')],
+      [categoryId('phone-hardware'), 'phone-camera-replacement', 'Camera Replacement', 'Replace a faulty front or rear phone camera.', 'Labor for compatible camera; part quoted separately.', ...fixed(350, '1–3 hours')],
+
+      [categoryId('data-storage'), 'basic-data-backup', 'Basic Data Backup', 'Create a verified copy of important files.', 'Selected-folder copy to approved local or external storage.', ...fixed(300, '1–3 hours')],
+      [categoryId('data-storage'), 'external-drive-setup', 'External Drive Setup', 'Configure an external backup or storage drive.', 'Partitioning, format, naming, permissions, and test copy.', ...fixed(250, '30–90 mins')],
+      [categoryId('data-storage'), 'file-organization', 'File Organization', 'Organize and catalog files and folders.', 'Structure cleanup and plain-language naming recommendations.', ...fixed(300, '1–3 hours')],
+      [categoryId('data-storage'), 'storage-migration', 'Storage Migration', 'Move data between drives or storage locations.', 'Copy verification and source/destination health review.', ...fixed(500, '2–6 hours')],
+      [categoryId('data-storage'), 'hdd-ssd-health-assessment', 'HDD/SSD Health Assessment', 'Check storage health and SMART indicators.', 'Drive report, warning signs, and backup/replacement guidance.', ...fixed(250, '30–90 mins')],
+      [categoryId('data-storage'), 'disk-cloning', 'Disk Cloning', 'Create an exact copy of a disk where supported.', 'Source/destination health check, clone, and verification.', ...fixed(600, '3–6 hours')],
+      [categoryId('data-storage'), 'secure-data-wiping', 'Secure Data Wiping', 'Securely erase a storage device before reuse or disposal.', 'Approved wipe method and completion verification.', ...fixed(400, '1–8 hours')],
+      [categoryId('data-storage'), 'deleted-file-recovery-assessment', 'Basic Deleted-File Recovery Assessment', 'Assess whether deleted files may be recoverable.', 'Device and file-system review; no destructive write procedure.', ...fixed(300, '1–2 hours')],
+      [categoryId('data-storage'), 'logical-data-recovery', 'Logical Data Recovery', 'Attempt non-destructive recovery of accessible lost data.', 'Scope depends on drive health, file system, and damage.', 0, 'custom_quote', 'Quoted after assessment', 'general_service', 0],
+
+      [categoryId('software-development'), 'simple-one-page-website', 'Simple One-Page Website', 'A concise, responsive one-page website.', 'Scope, design, deployment, and handoff quoted by requirements.', ...fixed(3000, '5–10 days', 'website_dev')],
+      [categoryId('software-development'), 'personal-portfolio-website', 'Personal Portfolio Website', 'A responsive portfolio website for individual work.', 'Pages, content integration, and deployment within agreed scope.', ...fixed(2500, '5–10 days', 'website_dev')],
+      [categoryId('software-development'), 'small-business-website', 'Small Business Website', 'A professional responsive business website.', 'Page design, content areas, forms, and deployment scope agreed first.', ...fixed(4000, '7–14 days', 'website_dev')],
+      [categoryId('software-development'), 'multi-page-website', 'Multi-Page Website', 'A complete multi-page responsive website.', 'Structured pages, navigation, content integration, and deployment.', ...fixed(6000, '10–21 days', 'website_dev')],
+      [categoryId('software-development'), 'website-inquiry-form', 'Website with Inquiry Form', 'A responsive website with a working inquiry form.', 'Form validation, delivery setup, spam protection, and integration.', ...fixed(5000, '7–14 days', 'website_dev')],
+      [categoryId('software-development'), 'website-maintenance', 'Website Maintenance', 'Monthly website checks and maintenance.', 'Updates, backup checks, content edits, and basic monitoring within scope.', 500, 'monthly', 'Ongoing monthly', 'website_dev', 0],
+      [categoryId('software-development'), 'website-bug-fixing', 'Website Bug Fixing', 'Diagnose and repair identified website issues.', 'Scoped bug fix and verification after reproduction.', ...fixed(500, '1–5 days', 'website_dev')],
+      [categoryId('software-development'), 'domain-hosting-configuration', 'Domain/Hosting Configuration', 'Configure domain and hosting services.', 'DNS, SSL, hosting connection, email routing, or deployment setup.', ...fixed(500, '1–3 days', 'website_dev')],
+      [categoryId('software-development'), 'python-automation-script', 'Python Automation Script', 'A custom Python script for repetitive tasks.', 'Requirements, implementation, testing, documentation, and handoff.', ...fixed(1000, '3–10 days', 'website_dev')],
+      [categoryId('software-development'), 'excel-csv-automation', 'Excel/CSV Automation', 'Automate spreadsheet or CSV processing.', 'Cleaning, transformation, reporting, or repeatable workflow script.', ...fixed(800, '3–10 days', 'website_dev')],
+      [categoryId('software-development'), 'automated-pdf-report-generation', 'Automated PDF Report Generation', 'Generate structured PDF reports automatically.', 'Template, data source, PDF generation, and output verification.', ...fixed(1000, '3–10 days', 'website_dev')],
+      [categoryId('software-development'), 'data-cleaning-processing', 'Data Cleaning and Processing', 'Clean, normalize, and process structured data.', 'Duplicate removal, validation, transformation, and export.', ...fixed(500, '2–7 days', 'website_dev')],
+      [categoryId('software-development'), 'database-setup', 'Database Setup', 'Set up a structured database for a new system.', 'Schema, constraints, seed data, access, and backup workflow.', ...fixed(1000, '3–10 days', 'website_dev')],
+      [categoryId('software-development'), 'simple-crud-app', 'Simple CRUD Application', 'Create a basic create, read, update, and delete application.', 'Core records, validation, interface, and deployment scope.', ...fixed(4000, '10–21 days', 'website_dev')],
+      [categoryId('software-development'), 'inventory-management-app', 'Inventory Management Application', 'Build inventory and stock tracking software.', 'Items, stock movements, reporting, users, and agreed integrations.', ...fixed(6000, '14–30 days', 'website_dev')],
+      [categoryId('software-development'), 'custom-dashboard', 'Custom Dashboard', 'Build a custom operational data dashboard.', 'Charts, tables, filters, data source integration, and deployment.', ...fixed(3000, '7–21 days', 'website_dev')],
+      [categoryId('software-development'), 'api-integration', 'API Integration', 'Integrate one or more APIs into a website or application.', 'Authentication, endpoints, mapping, error handling, and testing.', ...fixed(1500, '3–14 days', 'website_dev')],
+      [categoryId('software-development'), 'custom-software-app', 'Custom Software Application', 'Build a software application tailored to your workflow.', 'Requirements and scope quoted after discovery.', 0, 'custom_quote', 'Quoted after scoping', 'website_dev', 0],
+
+      [categoryId('additional-services'), 'remote-assistance-30', 'Remote Assistance, Up to 30 Minutes', 'Guided remote troubleshooting session.', 'Available subject to stable Internet access and customer authorization.', ...fixed(250, 'Up to 30 mins')],
+      [categoryId('additional-services'), 'remote-assistance-60', 'Remote Assistance, Up to 1 Hour', 'One-hour guided remote support session.', 'Available subject to stable Internet access and customer authorization.', ...fixed(450, 'Up to 60 mins')],
+      [categoryId('additional-services'), 'on-site-service-callout', 'On-site Service Callout', 'Travel and initial on-site service visit.', 'Actual location, access, and service scope confirmed before dispatch.', ...fixed(350, 'Scheduled')],
+      [categoryId('additional-services'), 'additional-on-site-hour', 'Additional On-Site Hour', 'Extra labor during an approved on-site visit.', 'Added beyond the initial service-call allocation.', ...fixed(250, 'Up to 60 mins')],
+      [categoryId('additional-services'), 'urgent-same-day-service', 'Urgent Same-Day Service', 'Priority scheduling for same-day availability.', 'Subject to availability; this is a 20% surcharge.', 0, 'custom_quote', 'Subject to availability', 'general_service', 0],
+      [categoryId('additional-services'), 'after-hours-service', 'After-Hours Service', 'Service outside standard business hours.', 'Subject to availability; this is a 25% surcharge.', 0, 'custom_quote', 'Subject to availability', 'general_service', 0],
+      [categoryId('additional-services'), 'device-pickup-delivery', 'Device Pickup / Delivery', 'Arrange pickup or delivery of customer devices.', 'Actual transport cost is confirmed based on distance and route.', 0, 'custom_quote', 'By arrangement', 'general_service', 0],
+      [categoryId('additional-services'), 'additional-device-same-visit', 'Additional Device, Same Visit', 'Add another device to an on-site service visit.', 'Applies to a compatible additional device handled on the same visit.', ...fixed(150, 'Same visit')],
+
+      [categoryId('service-packages'), 'pagawaan-pc-rescue', 'Pagawaan PC Rescue', 'Basic diagnostics, software troubleshooting, startup optimization, and basic assessment.', 'For one computer with standard software issues; no parts included.', 599, 'fixed_starting', 'Est. 2–4 hours', 'pc_troubleshooting', 1],
+      [categoryId('service-packages'), 'pagawaan-pc-refresh', 'Pagawaan PC Refresh', 'Desktop cleaning, software cleanup, startup optimization, and temperature inspection.', 'Thermal paste and replacement materials are quoted separately.', 999, 'fixed_starting', 'Est. 2–4 hours', 'general_service', 1],
+      [categoryId('service-packages'), 'pagawaan-network-ready', 'Pagawaan Network Ready', 'Router configuration, one custom Ethernet cable up to 5m, testing, and one device connection.', 'Subject to existing equipment and cable routing conditions.', 899, 'fixed_starting', 'Est. 2–4 hours', 'network_install', 1],
+      [categoryId('service-packages'), 'pagawaan-office-essentials', 'Pagawaan Office Essentials', 'Router setup, printer sharing, up to three device configurations, and basic network testing.', 'Existing equipment and network infrastructure are required.', 1999, 'fixed_starting', 'Est. 3–6 hours', 'network_install', 1],
     ];
 
-    for (const row of servicesSeed) {
-      insertService.run(...row);
-    }
+    for (const row of services) upsertService.run(...row);
   });
 
   tx();

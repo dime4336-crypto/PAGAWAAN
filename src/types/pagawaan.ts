@@ -3,8 +3,14 @@ import { z } from 'zod';
 export type CategorySlug =
   | 'computer-laptop'
   | 'networking-ethernet'
+  | 'network-router'
   | 'mobile-assistance'
+  | 'phone-hardware'
+  | 'data-recovery'
+  | 'data-storage'
   | 'software-development';
+  | 'additional-services'
+  | 'service-packages';
 
 export type PricingType =
   | 'fixed_starting'
