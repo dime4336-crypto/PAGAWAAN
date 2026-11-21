@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: pagawaan-api
+    runtime: node
+    plan: free
+    buildCommand: npm ci && npm run build
+    startCommand: npm run start
+    healthCheckPath: /api/catalog
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DB_PATH
+        value: /tmp/pagawaan.db
+      - key: ADMIN_ACCESS_KEY
+        generateValue: true
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: ADMIN_ACTION_PIN
+        sync: false

@@ -35,7 +35,7 @@ dotenv.config();
 
 initializeDatabase();
 
-const PORT = 3000;
+const PORT = Number(process.env.PORT) || 3000;
 const ADMIN_COOKIE_NAME = 'pagawaan_admin_session';
 const ADMIN_ACCESS_KEY = process.env.ADMIN_ACCESS_KEY || 'pagawaan-bench-2026';
 const SESSION_SECRET =
