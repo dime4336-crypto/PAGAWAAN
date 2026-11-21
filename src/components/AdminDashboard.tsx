@@ -15,6 +15,8 @@ import { formatPHP } from '../config/pricing';
 import type { WorkshopContactConfig } from '../config/workshop';
 import {
   REQUEST_STATUSES,
+  QUEUE_STATUSES,
+  type QueueStatus,
   type RequestStatus,
   type ServiceCategory,
   type ServiceItem,
@@ -54,6 +56,7 @@ export function AdminDashboard({
   const [selectedRequestId, setSelectedRequestId] = useState<number | null>(null);
   const [newNote, setNewNote] = useState('');
   const [savingNote, setSavingNote] = useState(false);
+  const [queueStatusError, setQueueStatusError] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Price editing map
@@ -197,6 +200,29 @@ export function AdminDashboard({
       const data = await res.json();
       setRequests((prev) => prev.map((r) => (r.id === requestId ? data.request : r)));
       showNotice(`Status updated to ${status}`);
+    }
+  };
+
+  const handleQueueStatusChange = async (requestId: number, queueStatus: QueueStatus) => {
+    setQueueStatusError(null);
+    try {
+      const response = await fetch(`/api/admin/requests/${requestId}/queue-status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ queueStatus }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Unable to update queue status.');
+      }
+      setRequests((previous) =>
+        previous.map((request) => (request.id === requestId ? data.request : request))
+      );
+      showNotice(`Queue status updated to ${queueStatus}`);
+    } catch (err: unknown) {
+      setQueueStatusError(
+        err instanceof Error ? err.message : 'Unable to update queue status.'
+      );
     }
   };
 
@@ -606,6 +632,36 @@ export function AdminDashboard({
                             </option>
                           ))}
                         </select>
+                      </div>
+                      <div>
+                        <label
+                          htmlFor="admin-queue-status-select"
+                          className="block text-[11px] text-[#A39B8B]"
+                        >
+                          Public Queue Status
+                        </label>
+                        <select
+                          id="admin-queue-status-select"
+                          value={selectedRequest.queueStatus}
+                          onChange={(event) =>
+                            handleQueueStatusChange(
+                              selectedRequest.id,
+                              event.target.value as QueueStatus
+                            )
+                          }
+                          className="mt-1 min-h-[38px] border border-[#D97724]/50 bg-[#141312] px-3 py-1.5 text-xs font-medium text-[#EDE6D6]"
+                        >
+                          {QUEUE_STATUSES.map((status) => (
+                            <option key={status} value={status}>
+                              {status}
+                            </option>
+                          ))}
+                        </select>
+                        {queueStatusError && (
+                          <p role="alert" className="mt-1 max-w-48 text-[10px] text-[#B8443A]">
+                            {queueStatusError}
+                          </p>
+                        )}
                       </div>
                     </div>
 

@@ -32,6 +32,7 @@ An interactive service catalog, custom Ethernet cable configurator, multi-servic
 4. **Build Your Cable Studio**: A dedicated interactive workbench lets visitors pick Cat5e or Cat6, set length in meters, choose jacket color and connector/boot type, select Straight-Through or Crossover wiring, and watch an animated SVG cable and 8-pin RJ45 plug update live alongside transparent material + labor estimates.
 5. **Quotation Tray & Submission**: Multiple configured services and custom cables accumulate in a slide-over request tray. Visitors fill in their name, PH contact number, optional email, Metro Manila barangay/city, service method, preferred date, and notes, confirm the quotation disclaimer checkbox, and submit to receive a server-generated `PAG-2026-XXXXX` reference receipt.
 6. **Owner Operations Console**: Navigating to the protected admin route prompts for the workshop passcode, then opens a dense tabular workspace to inspect requests, inspect JSON configurations, advance workflow statuses, write internal notes, edit catalog pricing/categories, and download CSV exports.
+7. **Public Service Queue**: A floating action button opens a live queue of request references and requested service names. The owner can mark each request **In Queue**, **Working on It**, or **Done** from the protected console. A completed entry remains visible for 30 minutes, then disappears from the public queue without deleting its admin record.
 
 ### Visual Identity & Theme
 
@@ -95,8 +96,9 @@ An interactive service catalog, custom Ethernet cable configurator, multi-servic
 │                     EXPRESS SERVER & API LAYER                            │
 │                                                                           │
 │  Public Routes:                       Protected Admin Routes:             │
-│  • GET  /api/catalog                  • POST /api/admin/session           │
-│  • GET  /api/config                   • GET  /api/admin/requests          │
+│  • GET  /api/catalog                  • GET  /api/admin/session           │
+│  • GET  /api/config                   • POST /api/admin/login             │
+│  • GET  /api/queue                    • GET  /api/admin/requests           │
 │  • POST /api/requests                 • PATCH /api/admin/requests/:id     │
 │    ├─ Zod Schema Validation           • PATCH /api/admin/services/:id     │
 │    ├─ Anti-Spam Honeypot & Rate Limit • POST/PATCH /api/admin/categories  │
@@ -118,7 +120,7 @@ An interactive service catalog, custom Ethernet cable configurator, multi-servic
 
 - **`service_categories`**: Slug, display name, description, display order, and active toggle.
 - **`services`**: Foreign key to category, name, summary, turnaround estimate label, starting price in PHP (`integer`), pricing model (`fixed_starting`, `per_unit`, `custom_quote`, `cable_formula`, `monthly`), active status, and structured configurator key.
-- **`service_requests`**: Unique sequential reference (`PAG-2026-00001`), customer full name, contact number, optional email, Metro Manila location/barangay, service method, preferred date, customer notes, server-computed `estimated_total`, workflow `status` (`New` through `Completed`/`Cancelled`), and creation timestamp.
+- **`service_requests`**: Unique sequential reference (`PAG-2026-00001`), customer full name, contact number, optional email, Metro Manila location/barangay, service method, preferred date, customer notes, server-computed `estimated_total`, workflow `status` (`New` through `Completed`/`Cancelled`), public `queue_status` (`In Queue`, `Working on It`, or `Done`) with a completion timestamp for 30-minute public retention, and creation timestamp.
 - **`service_request_items`**: Foreign key to request and service, quantity, serialized JSON configuration payload (OS details, Cat5e/Cat6 cable specs, room count, website scope), and server-calculated line estimate.
 - **`request_internal_notes`**: Timestamped internal workshop notes linked to each request.
 
@@ -128,3 +130,4 @@ An interactive service catalog, custom Ethernet cable configurator, multi-servic
 - **Cable Builder Flow**: Adjusting category (`Cat5e`/`Cat6`), length (`1–100m`), wiring (`Straight-Through`/`Crossover`), jacket color, connector type, or quantity immediately updates the SVG conductor animation, recalculates the breakdown via the shared pricing rules, and allows one-click addition to the quotation tray.
 - **Request Submission & Recovery**: Submitting the customer form triggers `POST /api/requests` with loading lock, field-level Zod errors, server-side rate-limit/honeypot checks, and atomic reference generation. On success, the tray clears and displays the official `PAG-2026-XXXXX` confirmation receipt; on failure, user inputs remain intact with actionable retry messaging.
 - **Admin Workflow**: Entering the passcode unlocks the admin session via cookie, fetches requests and catalog records, supports live status updates (`PATCH`), internal note appending, price/availability toggling, category management, and instant RFC-4180 CSV download.
+- **Public Queue**: A public, read-only endpoint returns only request references, service names, queue status, and submission time. Admin-only queue status updates record the completion time when set to `Done`; completed entries are filtered from the public queue 30 minutes later while remaining in admin history.

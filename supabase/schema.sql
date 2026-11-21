@@ -55,6 +55,10 @@ CREATE TABLE IF NOT EXISTS public.service_requests (
       'Cancelled'
     )
   ),
+  queue_status TEXT NOT NULL DEFAULT 'In Queue' CHECK (
+    queue_status IN ('In Queue', 'Working on It', 'Done')
+  ),
+  queue_done_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 

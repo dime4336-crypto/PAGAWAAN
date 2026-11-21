@@ -8,6 +8,8 @@ import {
 import { calculateAuthoritativeItemEstimate } from '../config/pricing.ts';
 import type {
   RequestStatus,
+  QueueStatus,
+  PublicQueueItem,
   ServiceCategory,
   ServiceItem,
   ServiceRequestRecord,
@@ -74,6 +76,10 @@ export function initializeDatabase(): void {
           'Cancelled'
         )
       ),
+      queue_status TEXT NOT NULL DEFAULT 'In Queue' CHECK (
+        queue_status IN ('In Queue', 'Working on It', 'Done')
+      ),
+      queue_done_at TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
@@ -104,6 +110,19 @@ export function initializeDatabase(): void {
     CREATE INDEX IF NOT EXISTS idx_requests_created ON service_requests(created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_request_items_req ON service_request_items(request_id);
   `);
+
+  const requestColumns = sqlite
+    .pragma('table_info(service_requests)') as Array<{ name: string }>;
+  if (!requestColumns.some((column) => column.name === 'queue_status')) {
+    sqlite.exec(`
+      ALTER TABLE service_requests
+      ADD COLUMN queue_status TEXT NOT NULL DEFAULT 'In Queue'
+      CHECK (queue_status IN ('In Queue', 'Working on It', 'Done'))
+    `);
+  }
+  if (!requestColumns.some((column) => column.name === 'queue_done_at')) {
+    sqlite.exec('ALTER TABLE service_requests ADD COLUMN queue_done_at TEXT');
+  }
 
   seedCatalogIfEmpty();
   seedWorkshopConfigIfEmpty();
@@ -736,6 +755,8 @@ export function getServiceRequestById(id: number): ServiceRequestRecord | null {
          estimated_total as estimatedTotal,
          has_custom_quote_items as hasCustomQuoteItems,
          status,
+         queue_status as queueStatus,
+         queue_done_at as queueDoneAt,
          created_at as createdAt
        FROM service_requests WHERE id = ?`
     )
@@ -802,10 +823,67 @@ export function listAllServiceRequests(): ServiceRequestRecord[] {
     .filter((item): item is ServiceRequestRecord => item !== null);
 }
 
+export function listPublicQueueItems(): PublicQueueItem[] {
+  const rows = sqlite
+    .prepare(
+      `SELECT
+         r.reference_number as referenceNumber,
+         r.queue_status as queueStatus,
+         r.created_at as createdAt,
+         s.name as serviceName
+       FROM service_requests r
+       JOIN service_request_items i ON i.request_id = r.id
+       JOIN services s ON s.id = i.service_id
+       WHERE r.queue_status != 'Done'
+          OR r.queue_done_at >= datetime('now', '-30 minutes')
+       ORDER BY r.created_at ASC, i.id ASC`
+    )
+    .all() as Array<{
+    referenceNumber: string;
+    queueStatus: QueueStatus;
+    createdAt: string;
+    serviceName: string;
+  }>;
+
+  const items = new Map<string, PublicQueueItem>();
+  for (const row of rows) {
+    const item = items.get(row.referenceNumber);
+    if (item) {
+      if (!item.serviceNames.includes(row.serviceName)) {
+        item.serviceNames.push(row.serviceName);
+      }
+    } else {
+      items.set(row.referenceNumber, {
+        referenceNumber: row.referenceNumber,
+        queueStatus: row.queueStatus,
+        createdAt: row.createdAt,
+        serviceNames: [row.serviceName],
+      });
+    }
+  }
+  return [...items.values()];
+}
+
 export function updateRequestStatus(id: number, status: RequestStatus): ServiceRequestRecord | null {
   const result = sqlite
     .prepare('UPDATE service_requests SET status = ? WHERE id = ?')
     .run(status, id);
+  if (result.changes === 0) return null;
+  return getServiceRequestById(id);
+}
+
+export function updateRequestQueueStatus(
+  id: number,
+  queueStatus: QueueStatus
+): ServiceRequestRecord | null {
+  const result = sqlite
+    .prepare(
+      `UPDATE service_requests
+       SET queue_status = ?,
+           queue_done_at = CASE WHEN ? = 'Done' THEN datetime('now') ELSE NULL END
+       WHERE id = ?`
+    )
+    .run(queueStatus, queueStatus, id);
   if (result.changes === 0) return null;
   return getServiceRequestById(id);
 }

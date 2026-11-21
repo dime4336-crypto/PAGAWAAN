@@ -14,13 +14,19 @@ import {
   getPublicCatalog,
   getWorkshopConfig,
   initializeDatabase,
+  listPublicQueueItems,
   listAllServiceRequests,
+  updateRequestQueueStatus,
   updateCategoryRecord,
   updateRequestStatus,
   updateServiceRecord,
   updateWorkshopConfig,
 } from './src/server/db.ts';
-import { REQUEST_STATUSES, submitRequestPayloadSchema } from './src/types/pagawaan.ts';
+import {
+  QUEUE_STATUSES,
+  REQUEST_STATUSES,
+  submitRequestPayloadSchema,
+} from './src/types/pagawaan.ts';
 
 dotenv.config();
 
@@ -115,6 +121,15 @@ async function startServer(): Promise<void> {
     } catch (error) {
       console.error('Failed to fetch workshop config:', error);
       res.status(500).json({ error: 'Unable to load workshop configuration.' });
+    }
+  });
+
+  app.get('/api/queue', (_req, res) => {
+    try {
+      res.json({ items: listPublicQueueItems() });
+    } catch (error) {
+      console.error('Failed to fetch public service queue:', error);
+      res.status(500).json({ error: 'Unable to load the service queue.' });
     }
   });
 
@@ -233,6 +248,29 @@ async function startServer(): Promise<void> {
     }
 
     const updated = updateRequestStatus(id, parsed.data.status as (typeof REQUEST_STATUSES)[number]);
+    if (!updated) {
+      res.status(404).json({ error: 'Service request not found.' });
+      return;
+    }
+    res.json({ request: updated });
+  });
+
+  app.patch('/api/admin/requests/:id/queue-status', requireAdminAuth, (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) {
+      res.status(400).json({ error: 'Invalid request ID.' });
+      return;
+    }
+
+    const parsed = z.object({
+      queueStatus: z.enum(QUEUE_STATUSES),
+    }).safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: 'Invalid queue status value.' });
+      return;
+    }
+
+    const updated = updateRequestQueueStatus(id, parsed.data.queueStatus);
     if (!updated) {
       res.status(404).json({ error: 'Service request not found.' });
       return;

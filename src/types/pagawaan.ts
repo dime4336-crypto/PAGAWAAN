@@ -43,6 +43,10 @@ export const REQUEST_STATUSES: RequestStatus[] = [
   'Cancelled',
 ];
 
+export type QueueStatus = 'In Queue' | 'Working on It' | 'Done';
+
+export const QUEUE_STATUSES: QueueStatus[] = ['In Queue', 'Working on It', 'Done'];
+
 export const SERVICE_METHODS = [
   'Walk-in / meet-up by arrangement',
   'On-site service (subject to location and availability)',
@@ -109,6 +113,8 @@ export interface ServiceRequestRecord {
   estimatedTotal: number | null;
   hasCustomQuoteItems: boolean;
   status: RequestStatus;
+  queueStatus: QueueStatus;
+  queueDoneAt: string | null;
   createdAt: string;
   items: {
     id: number;
@@ -120,6 +126,13 @@ export interface ServiceRequestRecord {
     estimatedPrice: number | null;
   }[];
   internalNotes: RequestInternalNote[];
+}
+
+export interface PublicQueueItem {
+  referenceNumber: string;
+  queueStatus: QueueStatus;
+  serviceNames: string[];
+  createdAt: string;
 }
 
 export const customerRequestSchema = z.object({

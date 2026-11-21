@@ -10,6 +10,7 @@ import { HowItWorksAndAbout } from './components/HowItWorksAndAbout';
 import { CalibrationIntro } from './components/motion/CalibrationIntro';
 import { PrecisionCursor } from './components/motion/PrecisionCursor';
 import { Navbar } from './components/Navbar';
+import { PublicQueue } from './components/PublicQueue';
 import { RequestDrawer } from './components/RequestDrawer';
 import { ServiceCatalog } from './components/ServiceCatalog';
 import { ServiceConfiguratorModal } from './components/ServiceConfiguratorModal';
@@ -37,6 +38,7 @@ export default function App() {
   const [trayOpen, setTrayOpen] = useState(false);
   const [cartItems, setCartItems] = useState<CartServiceItem[]>([]);
   const [toastText, setToastText] = useState<string | null>(null);
+  const [queueRefreshToken, setQueueRefreshToken] = useState(0);
 
   const triggerToast = useCallback((msg: string) => {
     setToastText(msg);
@@ -203,6 +205,8 @@ export default function App() {
           onOpenTray={() => setTrayOpen(true)}
         />
 
+        <PublicQueue refreshToken={queueRefreshToken} />
+
         {/* Modals & Request Tray */}
         <ServiceDetailModal
           service={inspectedService}
@@ -225,6 +229,7 @@ export default function App() {
           onClearItems={() => setCartItems([])}
           onRequestSubmitted={(record) => {
             triggerToast(`Submitted ${record.referenceNumber}`);
+            setQueueRefreshToken((token) => token + 1);
           }}
         />
 
@@ -237,7 +242,7 @@ export default function App() {
               initial={prefersReducedMotion ? { opacity: 1 } : { opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
               exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: 12 }}
-              className="fixed bottom-5 right-5 z-50 flex items-center gap-2.5 border border-[#5C8D76]/70 bg-[#1B1917] px-4 py-3 text-xs font-medium text-[#EDE6D6] shadow-xl"
+              className="fixed bottom-20 right-5 z-50 flex items-center gap-2.5 border border-[#5C8D76]/70 bg-[#1B1917] px-4 py-3 text-xs font-medium text-[#EDE6D6] shadow-xl"
             >
               <CheckCircle2 className="h-4 w-4 shrink-0 text-[#5C8D76]" />
               <span>{toastText}</span>
